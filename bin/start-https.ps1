@@ -19,6 +19,33 @@ function Start-ArenaPhpCgi {
     Start-Process -FilePath $phpCgi -ArgumentList '-b', '127.0.0.1:9000' -WorkingDirectory $project -WindowStyle Hidden -PassThru
 }
 
+function Test-LocalPort([int]$Port) {
+    foreach ($address in @([Net.IPAddress]::Loopback, [Net.IPAddress]::IPv6Loopback)) {
+        $client = [Net.Sockets.TcpClient]::new($address.AddressFamily)
+        try {
+            $connection = $client.ConnectAsync($address, $Port)
+            if ($connection.Wait(500) -and $client.Connected) { return $true }
+        } catch {
+            # An unavailable address family or a refused connection is not a listener.
+        } finally {
+            $client.Dispose()
+        }
+    }
+    return $false
+}
+
+function Get-ProjectCaddy {
+    @(Get-CimInstance Win32_Process -Filter "Name='caddy.exe'" | Where-Object {
+        $_.ExecutablePath -ieq $caddy -and $_.CommandLine -like "*$config*"
+    })
+}
+
+function Get-ProjectPhpCgi {
+    @(Get-CimInstance Win32_Process -Filter "Name='php-cgi.exe'" | Where-Object {
+        $_.ExecutablePath -ieq $phpCgi -and $_.CommandLine -match '127\.0\.0\.1:9000'
+    })
+}
+
 New-Item -ItemType Directory -Path $runtime -Force | Out-Null
 if (-not (Test-Path -LiteralPath $caddy)) {
     Write-Host 'Descargando Caddy desde caddyserver.com...'
@@ -67,26 +94,22 @@ http://localhost:8000 {
 & $caddy validate --config $config --adapter caddyfile | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'La configuración HTTPS no es válida.' }
 
-$existingHttps = Get-NetTCPConnection -LocalPort 8443 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$existingHttps = Test-LocalPort 8443
 if ($existingHttps) {
-    $existingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $($existingHttps.OwningProcess)"
-    if ($existingProcess.Name -ne 'caddy.exe' -or $existingProcess.CommandLine -notlike "*$config*") {
+    if (-not (Get-ProjectCaddy)) {
         throw 'El puerto HTTPS 8443 está ocupado por otro programa.'
     }
-    $existingPhpListener = Get-NetTCPConnection -LocalPort 9000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($existingPhpListener) {
-        $existingPhp = Get-CimInstance Win32_Process -Filter "ProcessId = $($existingPhpListener.OwningProcess)"
-        if ($existingPhp.Name -ne 'php-cgi.exe' -or $existingPhp.ExecutablePath -ne $phpCgi -or $existingPhp.CommandLine -notmatch '127\.0\.0\.1:9000') {
-            throw 'El puerto PHP 9000 está ocupado por otro programa.'
-        }
-        Stop-Process -Id $existingPhp.ProcessId
-        for ($attempt = 0; $attempt -lt 20; $attempt++) {
-            if (-not (Get-NetTCPConnection -LocalPort 9000 -State Listen -ErrorAction SilentlyContinue)) { break }
-            Start-Sleep -Milliseconds 100
-        }
-        if (Get-NetTCPConnection -LocalPort 9000 -State Listen -ErrorAction SilentlyContinue) {
-            throw 'PHP no liberó el puerto 9000.'
-        }
+    $existingPhp = Get-ProjectPhpCgi
+    if ((Test-LocalPort 9000) -and -not $existingPhp) {
+        throw 'El puerto PHP 9000 está ocupado por otro programa.'
+    }
+    foreach ($process in $existingPhp) { Stop-Process -Id $process.ProcessId }
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        if (-not (Test-LocalPort 9000)) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (Test-LocalPort 9000) {
+        throw 'PHP no liberó el puerto 9000.'
     }
     $cgiProcess = Start-ArenaPhpCgi
     Start-Sleep -Milliseconds 500
@@ -103,16 +126,17 @@ if ($existingHttps) {
 }
 
 # Replace only an older PHP development server for this same project.
-$oldHttp = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
-foreach ($listener in $oldHttp) {
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"
-    if ($process.Name -eq 'php.exe' -and $process.CommandLine -like "*$project*" -and $process.CommandLine -match ' -S (localhost|127\.0\.0\.1):8000(?: |$)') {
-        Stop-Process -Id $process.ProcessId
-    }
+if (Test-LocalPort 8000) {
+    $oldHttp = @(Get-CimInstance Win32_Process -Filter "Name='php.exe'" | Where-Object {
+        $_.CommandLine -like "*$project*" -and $_.CommandLine -match ' -S (localhost|127\.0\.0\.1):8000(?: |$)'
+    })
+    foreach ($process in $oldHttp) { Stop-Process -Id $process.ProcessId }
 }
+foreach ($process in (Get-ProjectCaddy)) { Stop-Process -Id $process.ProcessId }
+foreach ($process in (Get-ProjectPhpCgi)) { Stop-Process -Id $process.ProcessId }
 Start-Sleep -Milliseconds 300
 foreach ($port in 8000, 8443, 9000) {
-    if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+    if (Test-LocalPort $port) {
         throw "El puerto $port está ocupado. Cierre el servidor anterior e inténtelo de nuevo."
     }
 }
@@ -123,7 +147,7 @@ try {
     if ($cgiProcess.HasExited) { throw 'PHP FastCGI no pudo iniciarse.' }
     $caddyProcess = Start-Process -FilePath $caddy -ArgumentList 'run', '--config', $config, '--adapter', 'caddyfile' -WorkingDirectory $project -WindowStyle Hidden -PassThru
     for ($attempt = 0; $attempt -lt 10; $attempt++) {
-        if (Get-NetTCPConnection -LocalPort 8443 -State Listen -ErrorAction SilentlyContinue) { break }
+        if (Test-LocalPort 8443) { break }
         Start-Sleep -Seconds 1
     }
     if ($caddyProcess.HasExited) { throw 'El servidor HTTPS no pudo iniciarse.' }
