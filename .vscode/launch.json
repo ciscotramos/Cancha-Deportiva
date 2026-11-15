@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Arena 7 (HTTPS)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "https://localhost:8443/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "Iniciar Arena 7 (HTTPS)"
+    }
+  ]
+}

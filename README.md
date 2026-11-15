@@ -31,6 +31,8 @@ El portal conserva sus endpoints PHP originales. La nueva API de cinco servicios
 
 4. La primera vez, ejecute `pwsh -File .\bin\confiar-certificado-https.ps1` y apruebe en Windows **solo** el certificado local de Caddy cuya huella muestra el script. Después abra `https://localhost:8443/`. El antiguo `http://localhost:8000/` responde únicamente con una redirección permanente a HTTPS. El certificado y la clave quedan en el perfil local de Windows; no se publican en GitHub. Si Windows no ha aprobado el certificado, el navegador mostrará una advertencia: no la omita, complete el paso de confianza.
 
+En VS Code, abra la carpeta `cancha-deportiva` y presione **F5**. La configuración `Arena 7 (HTTPS)` inicia o reinicia el servidor y abre la aplicación en Edge. La confianza del certificado local es un paso único por certificado; si Caddy genera uno nuevo, vuelva a ejecutar `pwsh -File .\bin\confiar-certificado-https.ps1` después de comprobar su huella.
+
 El servidor PHP integrado (`php -S`) no ofrece TLS, así que no lo use para iniciar este proyecto. El script ejecuta PHP FastCGI solo en `127.0.0.1:9000` y sirve exclusivamente los recursos públicos; bloquea rutas internas como `services/`, `tests/` y `.env`. Para publicar en Internet hará falta un dominio y un certificado público válido en el servidor HTTPS; subir código a GitHub no publica la aplicación.
 
 ## Servicios

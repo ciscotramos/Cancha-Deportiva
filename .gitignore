@@ -7,7 +7,9 @@
 # Editors and operating system files
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 
 # Dependencies and generated files
