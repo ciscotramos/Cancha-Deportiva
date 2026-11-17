@@ -3,6 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# La imagen base trae un repositorio de Yarn con firma vencida que rompe apt-get update.
+sudo rm -f /etc/apt/sources.list.d/yarn*.list
 sudo apt-get update -q
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q mariadb-server
 php -m | grep -qi mysqli || sudo docker-php-ext-install mysqli
