@@ -13,6 +13,10 @@ if ! php -m 2>/dev/null | grep -qi '^mysqli$'; then
     || sudo env PATH="$PATH" PHP_INI_DIR="${PHP_INI_DIR:-/usr/local/etc/php}" docker-php-ext-install mysqli
 fi
 
+# El PHP de la imagen busca el socket en /tmp; MariaDB de Debian lo crea en /run/mysqld.
+echo "mysqli.default_socket=/run/mysqld/mysqld.sock" \
+  | sudo tee "${PHP_INI_DIR:-/usr/local/etc/php}/conf.d/zz-arena7-mysql.ini" >/dev/null
+
 sudo service mariadb start
 sudo mariadb < database/setup_arena7.sql
 sudo mariadb -e "CREATE USER IF NOT EXISTS 'arena7'@'localhost' IDENTIFIED BY 'arena7_local';
