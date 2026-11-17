@@ -27,6 +27,8 @@ function externalJson(string $url,string $token,?array $data=null,array $extra=[
 mysqli_report(MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT);
 $db=new mysqli(cfg('DB_HOST','localhost'),cfg('DB_USER','root'),cfg('DB_PASSWORD'),cfg('DB_NAME','cancha_deportiva'));
 $db->set_charset('utf8mb4');
+// Perú no usa horario de verano: la BD usa la misma hora que PHP (America/Lima).
+$db->query("SET time_zone='-05:00'");
 if(PHP_SAPI!=='cli'){
     if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {
         http_response_code(426);
