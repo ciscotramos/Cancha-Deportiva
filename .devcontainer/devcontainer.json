@@ -1,0 +1,23 @@
+{
+  "name": "Arena 7 - Cancha Deportiva",
+  "image": "mcr.microsoft.com/devcontainers/php:1-8.2-bookworm",
+  "containerEnv": {
+    "DB_HOST": "localhost",
+    "DB_NAME": "cancha_deportiva",
+    "DB_USER": "arena7",
+    "DB_PASSWORD": "arena7_local",
+    "PRIVATE_DATA_OWNER": "admin@arena7.com",
+    "TAYPI_MODE": "sandbox"
+  },
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "Arena 7", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["bmewburn.vscode-intelephense-client"]
+    }
+  }
+}

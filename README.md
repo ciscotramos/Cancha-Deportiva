@@ -108,3 +108,15 @@ Para enviar mediante Gmail, active la [verificación en dos pasos y cree una con
 Resend sigue disponible como alternativa: requiere una [cuenta](https://resend.com/), una clave API de envío y un [dominio propio verificado](https://resend.com/docs/dashboard/domains/introduction). Configure `RESEND_API_KEY` y `MAIL_FROM` (por ejemplo, `reservas@su-dominio.com`). Si ambos proveedores están configurados, se usa Gmail. Reinicie PHP después de configurar las variables. Ejecute `php bin/notificaciones.php` para procesar la cola manualmente. En Windows, `pwsh -File .\bin\instalar_tarea_notificaciones.ps1` crea la tarea `Arena7-Notificaciones`, que ejecuta ese procesador cada minuto mientras el usuario de Windows tiene la sesión abierta. Si el equipo está apagado o la sesión está cerrada, el proceso no puede enviar hasta volver a ejecutarse.
 
 `php tests/notificaciones_integration.php` comprueba que reservas de clientes distintos conserven destinatarios y mensajes independientes, además de la cola, confirmación y validación, con tablas temporales y sin enviar correos. Se puede establecer `TEST_NOTIFICATION_EMAIL` solo en la sesión de prueba para usar un destinatario concreto, sin escribirlo en el repositorio. Para una prueba real use una reserva de prueba con un correo que controle, confirme el pago cuando corresponda, ejecute el procesador y revise tanto el estado en el menú como la bandeja del destinatario. La tarea de Windows también se ejecuta cuando el portátil está funcionando con batería. Sin credenciales de envío, las notificaciones se conservan como `Pendiente` y no se afirma que se hayan entregado.
+
+## Ejecutar en GitHub Codespaces (sin instalar nada)
+
+1. En GitHub: **Code → Codespaces → Create codespace on main**.
+2. Espera a que termine la preparación (instala MariaDB, crea la base `cancha_deportiva`, ejecuta `bin/migrate.php` e inicia PHP en el puerto 8000).
+3. Abre el puerto **8000** desde la pestaña *Ports* (Codespaces lo sirve por HTTPS).
+4. Inicia sesión con:
+   - Correo: `admin@arena7.com`
+   - Contraseña: `Arena7#2026`
+   - CAPTCHA: la suma que muestra la página
+
+El script de la base de datos está en `database/setup_arena7.sql`. Cambie la contraseña del administrador antes de usar el sistema con datos reales.
