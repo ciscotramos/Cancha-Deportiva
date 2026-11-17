@@ -7,7 +7,11 @@ cd "$(dirname "$0")/.."
 sudo rm -f /etc/apt/sources.list.d/yarn*.list
 sudo apt-get update -q
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q mariadb-server
-php -m | grep -qi mysqli || sudo docker-php-ext-install mysqli
+# sudo borra PHP_INI_DIR; se pasa explícitamente para que la extensión quede activada.
+if ! php -m 2>/dev/null | grep -qi '^mysqli$'; then
+  sudo env PATH="$PATH" PHP_INI_DIR="${PHP_INI_DIR:-/usr/local/etc/php}" docker-php-ext-enable mysqli 2>/dev/null \
+    || sudo env PATH="$PATH" PHP_INI_DIR="${PHP_INI_DIR:-/usr/local/etc/php}" docker-php-ext-install mysqli
+fi
 
 sudo service mariadb start
 sudo mariadb < database/setup_arena7.sql
