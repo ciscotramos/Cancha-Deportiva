@@ -16,12 +16,12 @@ class LegacyReservationService {
         $pago = (string)$input['pago'];
         $codigo = trim((string)($input['codigoPago'] ?? ''));
         $detalle = trim((string)($input['detalle'] ?? ''));
-        $monto = $new && $pago === 'Pasarela QR' ? TariffService::amount($hora) : (string)$input['monto'];
+        $monto = $new && PagosAutomaticos::es($pago) ? TariffService::amount($hora) : (string)$input['monto'];
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $fecha);
         if (!preg_match('/^\d{8}$/', $dni) || mb_strlen($cliente) > 150 || !preg_match('/^[+0-9 ()-]{9,20}$/', $telefono)
             || !in_array($cancha, ['1','2','3','4'], true)
             || !in_array($hora, ['08','09','10','11','12','13','14','15','16','18','19','20','21'], true)
-            || !in_array($pago, ['Yape','Plin','Efectivo','Pasarela QR'], true)
+            || !in_array($pago, ['Yape','Plin','Efectivo','Pasarela QR',PagosAutomaticos::YAPE_MP], true)
             || !$date || $date->format('Y-m-d') !== $fecha || $fecha < date('Y-m-d')
             || !is_numeric($monto) || (float)$monto <= 0 || (float)$monto > 999999.99
             || mb_strlen($codigo) > 100 || mb_strlen($detalle) > 2000
@@ -31,7 +31,10 @@ class LegacyReservationService {
         if ($pago === 'Pasarela QR' && !TaypiGateway::configured()) {
             throw new ApiError('La pasarela todavía no está configurada.', 503);
         }
-        if ($pago === 'Pasarela QR' && $codigo !== '') throw new ApiError('El código de la pasarela lo genera el proveedor.');
+        if ($pago === PagosAutomaticos::YAPE_MP && !(new MercadoPagoGateway())->configurada()) {
+            throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503);
+        }
+        if (PagosAutomaticos::es($pago) && $codigo !== '') throw new ApiError('El código de la pasarela lo genera el proveedor.');
         return [$dni, $cliente, $telefono, $cancha, $fecha, $hora, $pago, $codigo, $monto, $detalle, $email];
     }
 
@@ -55,7 +58,7 @@ class LegacyReservationService {
         $paymentValue = $input['pagoRecibido'] ?? ($fields[6] === 'Efectivo' ? '1' : '0');
         $paymentReceived = is_bool($paymentValue) ? ($paymentValue ? '1' : '0') : (string)$paymentValue;
         if (!in_array($paymentReceived, ['0', '1'], true)
-            || ($fields[6] === 'Pasarela QR' && $paymentReceived === '1')) {
+            || (PagosAutomaticos::es($fields[6]) && $paymentReceived === '1')) {
             throw new ApiError('Estado de pago inválido.');
         }
         $paid = $paymentReceived === '1';

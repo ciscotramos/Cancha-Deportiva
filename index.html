@@ -88,6 +88,7 @@
                         <option value="PAGO_CONFIRMAR_MANUAL">Pago confirmado</option>
                         <option value="PAGO_CONFIRMAR_PASARELA">Pago confirmado por pasarela</option>
                         <option value="PAGO_PASARELA_TARDIO">Pago tardío por revisar</option>
+                        <option value="PAGO_RECHAZADO_PASARELA">Pago rechazado por pasarela</option>
                     </select></div>
                     <div><label for="auditoriaRecursoId">ID de recurso</label><input type="number" id="auditoriaRecursoId" min="1" placeholder="Número de reserva o pago"></div>
                     <div><label for="auditoriaDesde">Desde</label><input type="date" id="auditoriaDesde"></div>
@@ -294,6 +295,7 @@
             <option>Yape</option>
             <option>Plin</option>
             <option>Efectivo</option>
+            <option value="Yape (Mercado Pago)">Yape con código de aprobación (Mercado Pago)</option>
             <option value="Pasarela QR">QR con monto automático (Yape o Plin)</option>
         </select>
         <div id="instruccionesYape" class="instrucciones-yape" role="status">
@@ -341,6 +343,25 @@
     </div>
 </div>
 
+<!-- MODAL COBRO YAPE (servicio de pago con Mercado Pago) -->
+<div class="modal" id="modalCobroYape">
+    <div class="formulario" style="width:420px">
+        <h2>Pagar con Yape</h2>
+        <p id="cobroYapeResumen"></p>
+        <label for="celularYape">Celular con Yape del cliente</label>
+        <input type="tel" id="celularYape" inputmode="numeric" maxlength="9" placeholder="987654321" autocomplete="off">
+        <label for="otpYape">Código de aprobación (6 dígitos)</label>
+        <input type="text" id="otpYape" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+        <small>El cliente lo encuentra en su app Yape → menú → «Código de aprobación». Dura pocos minutos y sirve una sola vez.</small>
+        <p id="cobroYapeModo" class="estado-dni" style="display:none"></p>
+        <p id="cobroYapeResultado" class="estado-dni" role="status" style="display:none"></p>
+        <div class="botones">
+            <button class="btn cancelar" onclick="cerrarCobroYape()">Cerrar</button>
+            <button class="btn" id="btnCobrarYape" onclick="cobrarYape()">Cobrar</button>
+        </div>
+    </div>
+</div>
+
 <div class="alerta" id="alerta"></div>
 
 <script>
@@ -357,6 +378,11 @@ let reservas = [];
 let pasarelaDisponible = false;
 let tarifas = {dia:"40.00", noche:"60.00"};
 let pasarelaModo = "sandbox";
+const YAPE_MP = "Yape (Mercado Pago)";
+let yapeMpDisponible = false;
+let yapeMpModo = "prueba";
+let reservaCobroYape = null;
+const esPagoAutomatico = metodo => metodo === "Pasarela QR" || metodo === YAPE_MP;
 function escapeHtml(value){
     return String(value ?? "").replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 }
@@ -420,6 +446,8 @@ async function activarSesion(){
             pasarelaDisponible = !!services.pasarela_qr;
             tarifas = services.tarifas || tarifas;
             pasarelaModo = services.pasarela_modo;
+            yapeMpDisponible = !!services.yape_mp;
+            yapeMpModo = services.yape_mp_modo || "prueba";
         }
     } catch(error) { console.error(error); }
     actualizarInstruccionesPago();
@@ -429,7 +457,7 @@ async function activarSesion(){
 
 function actualizarInstruccionesPago(){
     const metodo = document.getElementById("pago").value;
-    const automatica = metodo === "Pasarela QR";
+    const automatica = esPagoAutomatico(metodo);
     const montoHorario = Number(document.getElementById("hora").value) >= 18 ? tarifas.noche : tarifas.dia;
     if(automatica) document.getElementById("pagoRecibido").checked = false;
     document.getElementById("instruccionesYape").style.display = metodo === "Yape" ? "block" : "none";
@@ -441,7 +469,10 @@ function actualizarInstruccionesPago(){
         : "Si aún no pagó, déjalo sin marcar. Solo confirma después de comprobar el dinero recibido.";
     const aviso = document.getElementById("instruccionesPasarela");
     aviso.style.display = automatica ? "block" : "none";
-    if(automatica) aviso.textContent = pasarelaDisponible
+    if(metodo === YAPE_MP) aviso.textContent = yapeMpDisponible
+        ? `Al guardar se abrirá el cobro por S/ ${montoHorario}: el cliente da su celular y el código de aprobación de Yape. La reserva se confirma sola si Yape aprueba.${yapeMpModo === "prueba" ? " Modo de prueba: no mueve dinero real." : ""}`
+        : "El cobro con Yape (Mercado Pago) aún no está configurado. Agrega MP_PUBLIC_KEY y MP_ACCESS_TOKEN.";
+    else if(automatica) aviso.textContent = pasarelaDisponible
         ? `Se generará un QR por S/ ${montoHorario}; al escanearlo, Yape o Plin mostrará ese importe. ${pasarelaModo === "sandbox" ? "Modo de prueba: no admite pagos reales." : "La reserva se confirmará al recibir el aviso verificado del pago."}`
         : "Para mostrar el monto dentro de Yape al escanear, activa una pasarela con cuenta de comercio. El QR personal de Yape no fija el importe.";
     document.getElementById("codigoPagoLabel").style.display = automatica ? "none" : "";
@@ -691,13 +722,18 @@ function guardarReserva(){
     let fecha = document.getElementById("fecha").value;
     let hora = document.getElementById("hora").value;
     let pago = document.getElementById("pago").value;
-    let pagoRecibido = pago !== "Pasarela QR" && document.getElementById("pagoRecibido").checked;
+    let pagoRecibido = !esPagoAutomatico(pago) && document.getElementById("pagoRecibido").checked;
     let codigoPago = document.getElementById("codigoPago").value.trim();
     let monto = document.getElementById("monto").value.trim();
     let detalle = document.getElementById("detalle").value.trim();
 
     if(dni === "" || cliente === "" || telefono === "" || fecha === "" || monto === ""){
         mostrarAlerta("No se puede guardar. Complete todos los datos obligatorios.", "error");
+        return;
+    }
+
+    if(pago === YAPE_MP && !yapeMpDisponible){
+        mostrarAlerta("El cobro con Yape (Mercado Pago) todavía no está configurado.", "error");
         return;
     }
 
@@ -797,8 +833,9 @@ function guardarReserva(){
                 mostrarAlerta("Reserva actualizada correctamente en la base de datos.", "ok");
             }else{
                 const avisoCorreo = email ? " Aviso por correo preparado; consulte su estado en Notificaciones." : "";
-                mostrarAlerta((pagoRecibido ? "Pago registrado y reserva confirmada." : pago === "Pasarela QR" ? "Reserva creada; generando QR de cobro." : "Reserva pendiente de pago; confirma cuando compruebes el abono.") + avisoCorreo, "ok");
+                mostrarAlerta((pagoRecibido ? "Pago registrado y reserva confirmada." : pago === "Pasarela QR" ? "Reserva creada; generando QR de cobro." : pago === YAPE_MP ? "Reserva separada por 10 minutos; ahora cobra con Yape." : "Reserva pendiente de pago; confirma cuando compruebes el abono.") + avisoCorreo, "ok");
                 if(pago === "Pasarela QR") abrirPagoPasarela(reservaActual);
+                else if(pago === YAPE_MP) abrirCobroYape(reservaActual);
                 else mostrarVoucher(reservaActual);
             }
 
@@ -891,7 +928,8 @@ function pintarTabla(){
                 <button onclick="editarReserva(${r.id})">✏️</button>
                 <button onclick="eliminarReserva(${r.id})">🗑️</button>
                 <button onclick="mostrarVoucherPorId(${r.id})">🧾</button>
-                ${r.estado === "Pendiente" && r.pagoId && r.pago !== "Pasarela QR" ? `<button onclick="confirmarPago(${r.pagoId})" title="Confirmar recepción del dinero">Confirmar pago</button>` : ""}
+                ${r.estado === "Pendiente" && r.pago === YAPE_MP ? `<button onclick="abrirCobroYapePorId(${r.id})" title="Cobrar con Yape">Cobrar Yape</button>` : ""}
+                ${r.estado === "Pendiente" && r.pagoId && !esPagoAutomatico(r.pago) ? `<button onclick="confirmarPago(${r.pagoId})" title="Confirmar recepción del dinero">Confirmar pago</button>` : ""}
             </td>
         `;
 
@@ -1062,6 +1100,7 @@ function mostrarVoucherPorId(id){
 
     if(reserva){
         if(reserva.pago === "Pasarela QR" && reserva.estado === "Pendiente") abrirPagoPasarela(reserva);
+        else if(reserva.pago === YAPE_MP && reserva.estado === "Pendiente") abrirCobroYape(reserva);
         else mostrarVoucher(reserva);
     }
 }
@@ -1083,6 +1122,69 @@ async function abrirPagoPasarela(reserva){
         mostrarVoucher(reserva);
         mostrarAlerta(error.message, "error");
     }
+}
+
+function abrirCobroYapePorId(id){
+    const reserva = reservas.find(r => r.id === id);
+    if(reserva) abrirCobroYape(reserva);
+}
+
+function abrirCobroYape(reserva){
+    reservaCobroYape = reserva;
+    document.getElementById("cobroYapeResumen").textContent =
+        `Reserva N° ${reserva.id} · Cancha ${reserva.cancha} · ${formatearFecha(reserva.fecha)} ${reserva.horaTexto} — Total: S/ ${reserva.monto}`;
+    document.getElementById("celularYape").value = /^9\d{8}$/.test(reserva.telefono || "") ? reserva.telefono : "";
+    document.getElementById("otpYape").value = "";
+    const modo = document.getElementById("cobroYapeModo");
+    modo.style.display = yapeMpModo === "prueba" ? "block" : "none";
+    modo.textContent = "Modo de prueba: usa el celular 111111111 y el código 123456 para simular un pago aprobado.";
+    document.getElementById("cobroYapeResultado").style.display = "none";
+    document.getElementById("btnCobrarYape").disabled = false;
+    document.getElementById("modalCobroYape").style.display = "flex";
+    document.getElementById("otpYape").focus();
+}
+
+function cerrarCobroYape(){
+    document.getElementById("modalCobroYape").style.display = "none";
+    reservaCobroYape = null;
+    cargarReservas();
+}
+
+async function cobrarYape(){
+    const reserva = reservaCobroYape;
+    const celular = document.getElementById("celularYape").value.replace(/\D/g, "");
+    const otp = document.getElementById("otpYape").value.trim();
+    const resultado = document.getElementById("cobroYapeResultado");
+    const mostrar = texto => { resultado.textContent = texto; resultado.style.display = "block"; };
+    if(!reserva) return;
+    if(!/^\d{9}$/.test(celular)) { mostrar("El celular de Yape debe tener 9 dígitos."); return; }
+    if(!/^\d{6}$/.test(otp)) { mostrar("El código de aprobación tiene 6 dígitos."); return; }
+    const boton = document.getElementById("btnCobrarYape");
+    boton.disabled = true;
+    mostrar("Procesando el cobro con Yape...");
+    try {
+        const response = await fetch("api.php/reservas/" + reserva.id + "/yape", {
+            method:"POST", headers:{"X-CSRF-Token":csrfToken, "Content-Type":"application/json"},
+            body:JSON.stringify({celular, otp})
+        });
+        const data = await response.json();
+        if(!response.ok) throw new Error(data.error || "No se pudo procesar el cobro.");
+        if(data.estado === "aprobado"){
+            document.getElementById("modalCobroYape").style.display = "none";
+            reservaCobroYape = null;
+            mostrarAlerta(data.mensaje + (data.operacion ? " Operación " + data.operacion + "." : ""), "ok");
+            reserva.estado = "Confirmado";
+            reserva.codigoPago = data.operacion || reserva.codigoPago;
+            cargarReservas();
+            mostrarVoucher(reserva);
+            return;
+        }
+        mostrar(data.mensaje);
+        document.getElementById("otpYape").value = "";
+    } catch(error) {
+        mostrar(error.message);
+    }
+    boton.disabled = false;
 }
 
 function mostrarVoucher(reserva){
@@ -1107,7 +1209,7 @@ function mostrarVoucher(reserva){
         <p><b>Fecha de registro:</b> ${escapeHtml(reserva.creado)}</p>
         <hr>
         <p class="mensaje-voucher">
-            ${reserva.estado === "Confirmado" ? "Reserva confirmada." : reserva.pago === "Pasarela QR" ? "Pago pendiente. La reserva se confirmará solo cuando la pasarela notifique el cobro." : "Pago pendiente de verificación. Esta constancia no acredita que se haya recibido dinero."}
+            ${reserva.estado === "Confirmado" ? "Reserva confirmada." : reserva.pago === "Pasarela QR" ? "Pago pendiente. La reserva se confirmará solo cuando la pasarela notifique el cobro." : reserva.pago === YAPE_MP ? "Pago pendiente. Cobra con Yape desde el botón «Cobrar Yape» antes de que venza la reserva." : "Pago pendiente de verificación. Esta constancia no acredita que se haya recibido dinero."}
         </p>
     `;
 

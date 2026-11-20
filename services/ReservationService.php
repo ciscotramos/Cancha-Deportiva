@@ -12,19 +12,24 @@ class ReservationService {
             if(!empty($d['codigoPago'])) throw new ApiError('El código de la pasarela lo genera el proveedor.');
             if($id===null) $d['monto']=TariffService::amount((string)$d['hora']);
         }
+        if(($d['pago']??'')===PagosAutomaticos::YAPE_MP) {
+            if(!(new MercadoPagoGateway())->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.',503);
+            if(!empty($d['codigoPago'])) throw new ApiError('El código de la operación lo genera Mercado Pago.');
+            if($id===null) $d['monto']=TariffService::amount((string)$d['hora']);
+        }
         if(!preg_match('/^\d{8}$/',$d['dni'])) throw new ApiError('DNI inválido: se requieren 8 dígitos.');
         if(!preg_match('/^[+0-9 ()-]{9,20}$/',$d['telefono'])) throw new ApiError('Teléfono inválido.');
         if(!in_array((string)$d['cancha'],['1','2','3','4'],true)||!in_array($d['hora'],['08','09','10','11','12','13','14','15','16','18','19','20','21'],true)) throw new ApiError('Cancha u horario inválido.');
         $dt=DateTimeImmutable::createFromFormat('!Y-m-d',$d['fecha']);
         if(!$dt||$dt->format('Y-m-d')!==$d['fecha']||$d['fecha']<date('Y-m-d')) throw new ApiError('Seleccione una fecha válida que no sea pasada.');
-        if(!in_array($d['pago'],['Yape','Plin','Efectivo','Pasarela QR'],true)||!is_numeric($d['monto'])||(float)$d['monto']<=0||(float)$d['monto']>999999.99) throw new ApiError('Método de pago o monto inválido.');
+        if(!in_array($d['pago'],['Yape','Plin','Efectivo','Pasarela QR',PagosAutomaticos::YAPE_MP],true)||!is_numeric($d['monto'])||(float)$d['monto']<=0||(float)$d['monto']>999999.99) throw new ApiError('Método de pago o monto inválido.');
         if($id===null) TariffService::validate((string)$d['hora'], (string)$d['monto']);
         if(!in_array($d['deporte']??'Fútbol',['Fútbol','Vóley'],true)) throw new ApiError('Deporte inválido.');
         if(!empty($d['email'])&&!filter_var($d['email'],FILTER_VALIDATE_EMAIL)) throw new ApiError('Correo de cliente inválido.');
         foreach(['cliente'=>150,'codigoPago'=>100,'detalle'=>2000,'email'=>254] as $key=>$max) if(mb_strlen($d[$key]??'')>$max) throw new ApiError("El campo $key es demasiado largo.");
         $paymentValue=$d['pagoRecibido']??($d['pago']==='Efectivo'?'1':'0');
         $paymentReceived=is_bool($paymentValue)?($paymentValue?'1':'0'):(string)$paymentValue;
-        if(!in_array($paymentReceived,['0','1'],true)||($d['pago']==='Pasarela QR'&&$paymentReceived==='1')) throw new ApiError('Estado de pago inválido.');
+        if(!in_array($paymentReceived,['0','1'],true)||(PagosAutomaticos::es($d['pago'])&&$paymentReceived==='1')) throw new ApiError('Estado de pago inválido.');
         // A DB advisory lock serializes all channels while the reservation and payment commit.
         if(!query($this->db,"SELECT GET_LOCK('arena7_reservas',5) locked")->get_result()->fetch_assoc()['locked']) throw new ApiError('Sistema ocupado, vuelva a intentar.',409);
         try {return transaction($this->db,function() use($d,$user,$id,$paymentReceived){

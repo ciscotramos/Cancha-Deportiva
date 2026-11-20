@@ -167,3 +167,38 @@ Los datos se guardan en el volumen `db_data` y se conservan al detener los conte
 5. Cree una reserva con «QR con monto automático (Yape o Plin)» y pague el QR con el simulador https://sandbox.taypi.pe/simulator desde el celular. La reserva pasa a **Confirmado** al recibir el aviso firmado.
 
 Detener el túnel: `docker compose stop tunel`.
+
+## Servicio de pago con Yape (Mercado Pago)
+
+El método **«Yape con código de aprobación (Mercado Pago)»** cobra la reserva sin revisar capturas: el cliente da su celular y el código de aprobación que muestra su app Yape; si Yape aprueba, la reserva se confirma sola, se registra la operación y se prepara el correo de confirmación.
+
+### Diseño orientado a servicios
+
+| Elemento | Archivo | Rol SOA |
+|---|---|---|
+| Contrato del servicio | `services/PasarelaPagoYape.php` | Interfaz estandarizada: el sistema solo depende de ella |
+| Adaptador del proveedor | `services/MercadoPagoGateway.php` | Consume el servicio externo REST de Mercado Pago |
+| Servicio de negocio | `services/YapePaymentService.php` | Orquesta reserva, pago, auditoría y notificación |
+| Punto de acceso | `POST /api.php/reservas/{id}/yape` | Expone el servicio al frontend |
+
+Principios aplicados: **contrato estandarizado** (interfaz `PasarelaPagoYape`), **bajo acoplamiento** (cambiar de proveedor solo requiere otro adaptador), **abstracción** (el frontend no conoce Mercado Pago), **reutilización** (el servicio usa los servicios existentes de tarifas, auditoría y notificaciones) y **composición** (reserva → cobro → confirmación → correo). Igual que la consulta DNI, consume un servicio externo mediante credenciales guardadas solo en el servidor.
+
+Flujo: `PasarelaPagoYape::cobrarYape()` → token de Yape (`/platforms/pci/yape/v1/payment`) → pago (`/v1/payments`, `payment_method_id=yape`) → `approved` confirma la reserva; `rejected` la deja pendiente para reintentar con un código nuevo. El importe lo calcula el servidor; la clave de idempotencia evita cobrar dos veces con el mismo código.
+
+### Configuración
+
+1. En https://www.mercadopago.com.pe/developers cree una aplicación (Pagos online → Checkout API) y copie la **Public Key** y el **Access Token** de prueba.
+2. Agréguelos a `.env`:
+
+   ```
+   MP_MODE=prueba
+   MP_PUBLIC_KEY=TEST-...
+   MP_ACCESS_TOKEN=TEST-...
+   ```
+
+3. `docker compose up -d` y cree una reserva con ese método.
+4. En modo de prueba use el celular **111111111** con el código **123456** (aprobado) o **111111112** (rechazado).
+
+`php tests/yape_mercadopago_integration.php` verifica importe, rechazo, aprobación, idempotencia y auditoría con un proveedor simulado que cumple el mismo contrato.
+
+Plin no está disponible en Mercado Pago; sigue como pago manual.

@@ -16,7 +16,7 @@ class PaymentService {
         if ($paid && query($this->db,"SELECT id FROM pagos WHERE reserva_id=? AND estado='Confirmado' LIMIT 1",[$reservation])->get_result()->fetch_assoc()) throw new ApiError('Esta reserva ya tiene un pago aprobado.',409);
         $status=$paid?'Confirmado':'Pendiente';
         query($this->db,'INSERT INTO pagos (reserva_id,metodo,codigo,monto,estado,usuario) VALUES (?,?,?,?,?,?)',[$reservation,$d['pago'],$code,$d['monto'],$status,$user['correo']]);
-        (new AuditService($this->db))->record($user['correo'],'PAGO_REGISTRAR','pagos',$this->db->insert_id,$paid?'Pago recibido y verificado por operador':($d['pago']==='Pasarela QR'?'Cobro pendiente de la pasarela':'Pago pendiente de revisión manual'));
+        (new AuditService($this->db))->record($user['correo'],'PAGO_REGISTRAR','pagos',$this->db->insert_id,$paid?'Pago recibido y verificado por operador':(PagosAutomaticos::es($d['pago'])?'Cobro pendiente de la pasarela':'Pago pendiente de revisión manual'));
         if($paid) {$this->confirmReservation($reservation,$user);}
     }
     private function confirmReservation(int $id,array $user): void {
@@ -30,7 +30,7 @@ class PaymentService {
         if (!query($this->db,"SELECT GET_LOCK('arena7_reservas',5) AS locked")->get_result()->fetch_assoc()['locked']) throw new ApiError('Sistema ocupado, vuelva a intentar.',409);
         try { return transaction($this->db,function() use($id,$user,$submittedCode){
             $p=query($this->db,'SELECT * FROM pagos WHERE id=?',[$id])->get_result()->fetch_assoc();if(!$p) throw new ApiError('Pago no encontrado.',404);
-            if($p['metodo']==='Pasarela QR') throw new ApiError('El pago por pasarela solo se confirma con el aviso verificado del proveedor.',409);
+            if(PagosAutomaticos::es($p['metodo'])) throw new ApiError('El pago por pasarela solo lo confirma el proveedor de pagos.',409);
             $r=query($this->db,'SELECT * FROM reservas WHERE id=? FOR UPDATE',[$p['reserva_id']])->get_result()->fetch_assoc();
             $p=query($this->db,'SELECT * FROM pagos WHERE id=? FOR UPDATE',[$id])->get_result()->fetch_assoc();
             if($p['estado']==='Confirmado') return ['ok'=>true,'comprobante'=>'PAGO-'.$id];
