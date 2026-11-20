@@ -143,3 +143,27 @@ Claves opcionales (consulta DNI, pasarela, Gmail): cree un archivo `.env` en la 
 | Borrar también la base de datos | `docker compose down -v` |
 
 Los datos se guardan en el volumen `db_data` y se conservan al detener los contenedores.
+
+### Pasarela QR (TAYPI) con Docker
+
+1. Cree una cuenta de prueba en https://sandbox.taypi.pe/register y copie sus claves.
+2. Agréguelas al archivo `.env` (no se sube a GitHub):
+
+   ```
+   TAYPI_MODE=sandbox
+   TAYPI_PUBLIC_KEY=taypi_pk_test_...
+   TAYPI_SECRET_KEY=taypi_sk_test_...
+   TAYPI_WEBHOOK_SECRET=...
+   ```
+
+3. Inicie también el túnel público, que solo deja pasar `POST /taypi_webhook.php`:
+
+   ```bash
+   docker compose --profile tunel up -d
+   docker compose logs tunel | grep trycloudflare
+   ```
+
+4. En el panel de TAYPI configure como webhook la dirección mostrada seguida de `/taypi_webhook.php`. La dirección cambia cada vez que se reinicia el túnel.
+5. Cree una reserva con «QR con monto automático (Yape o Plin)» y pague el QR con el simulador https://sandbox.taypi.pe/simulator desde el celular. La reserva pasa a **Confirmado** al recibir el aviso firmado.
+
+Detener el túnel: `docker compose stop tunel`.

@@ -2,3 +2,21 @@
 localhost {
 	reverse_proxy app:8000
 }
+
+# Entrada solo para el túnel público (perfil "tunel"): deja pasar únicamente
+# el aviso de pago de TAYPI. El resto del sistema no queda expuesto a Internet.
+:8080 {
+	@webhook {
+		method POST
+		path /taypi_webhook.php
+	}
+	handle @webhook {
+		reverse_proxy app:8000 {
+			# El túnel ya llega por HTTPS desde Internet.
+			header_up X-Forwarded-Proto https
+		}
+	}
+	handle {
+		respond "No disponible" 404
+	}
+}
