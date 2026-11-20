@@ -446,6 +446,12 @@ td button:hover{
     color:#8b3300;
     border-left:4px solid #e67e22;
 }
+.estado-dni.rechazo{
+    background:#fdecec;
+    color:#8a1c1c;
+    border-left:4px solid #d93025;
+    border-radius:0 6px 6px 0;
+}
 .instrucciones-yape{
     margin:10px 0 14px;
 }

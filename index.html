@@ -410,7 +410,6 @@ const horariosPorTurno = {
 };
 
 window.onload = function(){
-    generarCaptcha();
 
     let hoy = new Date().toISOString().split("T")[0];
 
@@ -426,7 +425,8 @@ window.onload = function(){
     }
 
     llenarSelectHoras();
-    activarSesion().catch(console.error);
+    // En orden: si ambas peticiones abren sesión a la vez, una reemplaza a la otra y se pierde el CAPTCHA.
+    activarSesion().catch(console.error).finally(() => generarCaptcha().catch(console.error));
 };
 
 async function activarSesion(){
@@ -871,11 +871,12 @@ function cargarReservas(){
                 pago: r.pago,
                 codigoPago: r.codigo_pago,
                 pagoId: r.pago_id ? Number(r.pago_id) : null,
+                operacionPago: esPagoAutomatico(r.pago) ? (r.pago_codigo || "") : "",
                 monto: r.monto,
                 detalle: r.detalle,
                 estado: r.estado,
                 usuario: r.usuario,
-                creado: r.fecha_registro
+                creado: r.fecha_registro || r.creado || ""
             };
         });
 
@@ -921,7 +922,7 @@ function pintarTabla(){
             <td>${formatearFecha(r.fecha)}</td>
             <td>${r.horaTexto} - ${r.horaFin}</td>
             <td>${escapeHtml(r.pago)}</td>
-            <td>${escapeHtml(r.codigoPago)}</td>
+            <td>${escapeHtml(r.operacionPago || r.codigoPago)}</td>
             <td class="${r.estado === "Confirmado" ? "estado-confirmado" : "estado-pendiente"}">${escapeHtml(r.estado)}</td>
             <td>${escapeHtml(r.usuario)}</td>
             <td>
@@ -978,7 +979,7 @@ function actualizarReportes(){
             <td>${formatearFecha(r.fecha)}</td>
             <td>${r.horaTexto} - ${r.horaFin}</td>
             <td>${escapeHtml(r.pago)}</td>
-            <td>${escapeHtml(r.codigoPago)}</td>
+            <td>${escapeHtml(r.operacionPago || r.codigoPago)}</td>
             <td>S/ ${escapeHtml(r.monto)}</td>
             <td>${escapeHtml(r.usuario)}</td>
             <td>${escapeHtml(r.creado)}</td>
@@ -1155,13 +1156,17 @@ async function cobrarYape(){
     const celular = document.getElementById("celularYape").value.replace(/\D/g, "");
     const otp = document.getElementById("otpYape").value.trim();
     const resultado = document.getElementById("cobroYapeResultado");
-    const mostrar = texto => { resultado.textContent = texto; resultado.style.display = "block"; };
+    const mostrar = (texto, error = true) => {
+        resultado.textContent = texto;
+        resultado.classList.toggle("rechazo", error);
+        resultado.style.display = "block";
+    };
     if(!reserva) return;
     if(!/^\d{9}$/.test(celular)) { mostrar("El celular de Yape debe tener 9 dígitos."); return; }
     if(!/^\d{6}$/.test(otp)) { mostrar("El código de aprobación tiene 6 dígitos."); return; }
     const boton = document.getElementById("btnCobrarYape");
     boton.disabled = true;
-    mostrar("Procesando el cobro con Yape...");
+    mostrar("Procesando el cobro con Yape...", false);
     try {
         const response = await fetch("api.php/reservas/" + reserva.id + "/yape", {
             method:"POST", headers:{"X-CSRF-Token":csrfToken, "Content-Type":"application/json"},
@@ -1174,7 +1179,7 @@ async function cobrarYape(){
             reservaCobroYape = null;
             mostrarAlerta(data.mensaje + (data.operacion ? " Operación " + data.operacion + "." : ""), "ok");
             reserva.estado = "Confirmado";
-            reserva.codigoPago = data.operacion || reserva.codigoPago;
+            reserva.operacionPago = data.operacion || reserva.operacionPago;
             cargarReservas();
             mostrarVoucher(reserva);
             return;
@@ -1203,6 +1208,7 @@ function mostrarVoucher(reserva){
         ${reserva.pago === "Pasarela QR" && reserva.estado === "Pendiente" && reserva.qrPasarela ? `<div class="qr-pasarela"><img src="${escapeHtml(reserva.qrPasarela)}" alt="Código QR de cobro por S/ ${escapeHtml(reserva.monto)}"></div>` : ""}
         ${reserva.pago === "Pasarela QR" && reserva.estado === "Pendiente" && !reserva.qrPasarela ? `<p>QR aún no disponible. Abra de nuevo esta constancia para reintentar.</p>` : ""}
         ${reserva.pago === "Pasarela QR" && reserva.modoPasarela === "sandbox" ? `<p>QR de prueba: no acepta pagos reales.</p>` : ""}
+        ${reserva.pago === YAPE_MP && reserva.estado === "Confirmado" && reserva.operacionPago ? `<p><b>Operación Mercado Pago:</b> ${escapeHtml(reserva.operacionPago)}</p>` : ""}
         ${reserva.estado === "Confirmado" && reserva.pagoId ? `<p><b>Comprobante:</b> PAGO-${escapeHtml(reserva.pagoId)}</p>` : ""}
         <p><b>Estado:</b> ${escapeHtml(reserva.estado)}</p>
         <p><b>Registrado por:</b> ${escapeHtml(reserva.usuario)}</p>
