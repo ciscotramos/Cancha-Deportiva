@@ -1,0 +1,4 @@
+# HTTPS local con certificado propio de Caddy. Reenvía todo al servidor PHP.
+localhost {
+	reverse_proxy app:8000
+}

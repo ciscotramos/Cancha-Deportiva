@@ -120,3 +120,26 @@ Resend sigue disponible como alternativa: requiere una [cuenta](https://resend.c
    - CAPTCHA: la suma que muestra la página
 
 El script de la base de datos está en `database/setup_arena7.sql`. Cambie la contraseña del administrador antes de usar el sistema con datos reales.
+
+## Ejecutar con Docker (Windows, Mac o Linux)
+
+Requiere Docker Desktop abierto. No hace falta instalar PHP ni MySQL.
+
+```bash
+docker compose up -d --build
+```
+
+La primera vez descarga las imágenes y crea la base de datos con el usuario administrador. Abra **https://localhost:8443/**. El certificado lo genera Caddy localmente: el navegador mostrará una advertencia la primera vez; elija *Avanzado → Continuar a localhost*.
+
+- Usuario: `admin@arena7.com`
+- Contraseña: `Arena7#2026`
+
+Claves opcionales (consulta DNI, pasarela, Gmail): cree un archivo `.env` en la raíz del proyecto, por ejemplo `RENIEC_TOKEN=su_token`, y ejecute `docker compose up -d` de nuevo. El archivo `.env` está en `.gitignore` y no se sube a GitHub.
+
+| Acción | Comando |
+|---|---|
+| Ver registros | `docker compose logs -f app` |
+| Detener | `docker compose down` |
+| Borrar también la base de datos | `docker compose down -v` |
+
+Los datos se guardan en el volumen `db_data` y se conservan al detener los contenedores.
