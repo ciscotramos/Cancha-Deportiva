@@ -6,6 +6,18 @@ Proyecto web PHP y MySQL para gestionar reservas de Arena 7, con una capa de ser
 
 El portal conserva sus endpoints PHP originales. La nueva API de cinco servicios está implementada parcialmente y todavía no está integrada por completo al frontend. El Yape personal conserva el registro pendiente y confirmación manual. Además hay una opción independiente de pasarela QR que fija el importe en el servidor y confirma únicamente avisos firmados del proveedor; permanece inactiva hasta configurar credenciales de comercio. Consulta DNI y correo requieren cuentas y claves de sus proveedores. Esta copia no incluye datos de clientes ni usuarios de la base de datos.
 
+## Demostración pública (Render)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ciscotramos/Cancha-Deportiva)
+
+El sistema se publica desde este repositorio en una URL HTTPS (`https://<servicio>.onrender.com`) que cualquier persona abre en su navegador, sin instalar nada. Configuración única del responsable:
+
+1. Crear una cuenta en https://render.com con GitHub y pulsar el botón **Deploy to Render** (lee `render.yaml`).
+2. Completar las variables secretas: `ADMIN_PASSWORD` (clave del administrador de la demo), `RENIEC_TOKEN`, `MP_PUBLIC_KEY`, `MP_ACCESS_TOKEN` y, opcionalmente, `GMAIL_ADDRESS` y `GMAIL_APP_PASSWORD`.
+3. Cada `git push` a `main` vuelve a desplegar automáticamente.
+
+El contenedor (`Dockerfile`, `deploy/render-start.sh`) incluye PHP 8.2, MariaDB y el trabajador de notificaciones; el proxy de Render aporta el HTTPS. Al arrancar crea la base de datos, aplica la migración y carga reservas de demostración (`bin/seed_demo.php`). En el plan gratuito el servicio se suspende tras unos 15 minutos sin visitas (la primera visita tarda alrededor de un minuto) y, al reiniciarse, la base vuelve al estado inicial de demostración. Para probar la URL pública con Postman, cambie la variable `baseUrl` de la colección a `https://<servicio>.onrender.com/api.php` y `clave` al valor de `ADMIN_PASSWORD`.
+
 ## Requisitos
 
 - PHP 8.2 con extensiones `mysqli` y `curl`.

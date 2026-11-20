@@ -1,0 +1,24 @@
+# Blueprint de Render: despliegue público del sistema desde GitHub.
+services:
+  - type: web
+    name: arena7-reservas
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /index.html
+    envVars:
+      - key: ADMIN_PASSWORD        # contraseña del admin en la demo pública
+        sync: false
+      - key: RENIEC_TOKEN          # token de Decolecta
+        sync: false
+      - key: MP_PUBLIC_KEY         # credenciales de prueba de Mercado Pago
+        sync: false
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_MODE
+        value: prueba
+      - key: GMAIL_ADDRESS
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
