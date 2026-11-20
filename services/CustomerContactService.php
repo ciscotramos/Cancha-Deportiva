@@ -3,7 +3,7 @@ final class CustomerContactService {
     public function __construct(private mysqli $db) {}
 
     public function lookup(string $dni): array {
-        if (!preg_match('/^\d{8}$/', $dni)) throw new ApiError('El DNI debe tener 8 dígitos.');
+        if (!preg_match('/^\d{8}$/', $dni)) throw new ApiError('El DNI debe tener 8 dígitos.', 422, 'DNI_INVALIDO');
         $row = query($this->db,
             "SELECT telefono FROM reservas WHERE dni=? AND telefono<>'' ORDER BY id DESC LIMIT 1",
             [$dni]

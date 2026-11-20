@@ -3,7 +3,7 @@
 require __DIR__.'/../services/bootstrap.php';
 require __DIR__.'/../services/LegacyReservationService.php';
 
-foreach (['reservas', 'pagos', 'auditoria', 'notificaciones'] as $table) {
+foreach (['reservas', 'pagos', 'auditoria','auditoria_cadena', 'notificaciones'] as $table) {
     $definition = $db->query("SHOW CREATE TABLE `$table`")->fetch_row()[1];
     $db->query(str_replace("CREATE TABLE `$table`", "CREATE TEMPORARY TABLE `$table`", $definition));
 }

@@ -10,12 +10,12 @@ final class YapePaymentService {
         $celular = preg_replace('/\D/', '', $celular);
         if (!preg_match('/^\d{9}$/', $celular)) throw new ApiError('El celular de Yape debe tener 9 dígitos.');
         if (!preg_match('/^\d{6}$/', $otp)) throw new ApiError('El código de aprobación de Yape tiene 6 dígitos.');
-        if (!$this->pasarela->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503);
+        if (!$this->pasarela->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
 
         // Un solo cobro a la vez por reserva.
         $lock = 'arena7_yape_'.$reservaId;
         if (!query($this->db, 'SELECT GET_LOCK(?,10) AS l', [$lock])->get_result()->fetch_assoc()['l']) {
-            throw new ApiError('Ya se está procesando un cobro para esta reserva.', 409);
+            throw new ApiError('Ya se está procesando un cobro para esta reserva.', 409, 'SISTEMA_OCUPADO');
         }
         try {
             $row = query($this->db,
@@ -25,7 +25,7 @@ final class YapePaymentService {
             if (!$row || $row['metodo'] !== PagosAutomaticos::YAPE_MP) throw new ApiError('Esta reserva no se cobra con Yape (Mercado Pago).', 404);
             if ($row['estado'] === 'Confirmado') return ['estado'=>'aprobado', 'mensaje'=>'Esta reserva ya estaba pagada.'];
             if ($row['estado'] !== 'Pendiente' || $row['reserva_estado'] !== 'Pendiente' || strtotime((string)$row['hold_until']) <= time()) {
-                throw new ApiError('La reserva venció o fue cancelada; cree una nueva reserva.', 409);
+                throw new ApiError('La reserva venció o fue cancelada; cree una nueva reserva.', 409, 'ESTADO_NO_PERMITIDO');
             }
 
             $monto = number_format((float)$row['monto'], 2, '.', '');
@@ -53,7 +53,7 @@ final class YapePaymentService {
             if ($r['estado'] !== 'aprobado') {
                 $accion = $r['estado'] === 'rechazado' ? 'PAGO_RECHAZADO_PASARELA' : 'PAGO_EN_PROCESO_PASARELA';
                 $auditoria->record($actor, $accion, 'pagos', $pagoId, $r['detalle'].' Operación '.$r['id'].'.');
-                return ['estado'=>$r['estado'], 'mensaje'=>$r['estado'] === 'rechazado'
+                return ['estado'=>$r['estado'], 'codigo'=>$r['estado'] === 'rechazado' ? 'PAGO_RECHAZADO' : 'PAGO_EN_PROCESO', 'operacion'=>$r['id'], 'mensaje'=>$r['estado'] === 'rechazado'
                     ? $r['detalle'].' La reserva sigue pendiente; puede reintentar con un código nuevo.'
                     : 'El pago está en revisión en Mercado Pago. Verifique su estado antes de reintentar.'];
             }

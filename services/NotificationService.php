@@ -18,7 +18,7 @@ class NotificationService {
         if (!in_array($event, ['Recibida','Confirmada'], true)) throw new InvalidArgumentException('Tipo de notificación inválido.');
         $r=query($this->db,'SELECT * FROM reservas WHERE id=?',[$id])->get_result()->fetch_assoc();
         $expected = $event === 'Recibida' ? 'Pendiente' : 'Confirmado';
-        if (!$r || $r['estado'] !== $expected) throw new ApiError('El estado de la reserva no permite esta notificación.', 409);
+        if (!$r || $r['estado'] !== $expected) throw new ApiError('El estado de la reserva no permite esta notificación.', 409, 'ESTADO_NO_PERMITIDO');
         $start=sprintf('%02d:00', (int)$r['hora']);
         $end=sprintf('%02d:00', (int)$r['hora'] + 1);
         $date=DateTimeImmutable::createFromFormat('!Y-m-d', $r['fecha'])->format('d/m/Y');

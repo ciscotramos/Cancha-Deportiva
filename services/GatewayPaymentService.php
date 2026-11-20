@@ -3,13 +3,13 @@ final class GatewayPaymentService {
     public function __construct(private mysqli $db) {}
 
     public function qr(int $reservationId): array {
-        if (!TaypiGateway::configured()) throw new ApiError('La pasarela todavía no está configurada.', 503);
+        if (!TaypiGateway::configured()) throw new ApiError('La pasarela todavía no está configurada.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         $row = query($this->db,
             'SELECT p.id,p.metodo,p.monto,p.estado,r.estado AS reserva_estado,r.hold_until FROM pagos p JOIN reservas r ON r.id=p.reserva_id WHERE r.id=?',
             [$reservationId])->get_result()->fetch_assoc();
-        if (!$row || $row['metodo'] !== 'Pasarela QR') throw new ApiError('Cobro de pasarela no encontrado.', 404);
+        if (!$row || $row['metodo'] !== 'Pasarela QR') throw new ApiError('Cobro de pasarela no encontrado.', 404, 'PAGO_NO_ENCONTRADO');
         if ($row['estado'] !== 'Pendiente' || $row['reserva_estado'] !== 'Pendiente'
-            || strtotime($row['hold_until']) <= time()) throw new ApiError('La reserva ya no admite un nuevo pago.', 409);
+            || strtotime($row['hold_until']) <= time()) throw new ApiError('La reserva ya no admite un nuevo pago.', 409, 'ESTADO_NO_PERMITIDO');
         $amount = number_format((float)$row['monto'], 2, '.', '');
         $reference = 'ARENA7-'.$row['id'];
         query($this->db,
@@ -49,7 +49,7 @@ final class GatewayPaymentService {
         }
         return transaction($this->db, function () use ($event, $reference, $providerId) {
             $attempt = query($this->db,'SELECT * FROM pasarela_pagos WHERE referencia=? FOR UPDATE',[$reference])->get_result()->fetch_assoc();
-            if (!$attempt) throw new ApiError('Cobro de pasarela no encontrado.', 404);
+            if (!$attempt) throw new ApiError('Cobro de pasarela no encontrado.', 404, 'PAGO_NO_ENCONTRADO');
             $payment = query($this->db,'SELECT * FROM pagos WHERE id=? FOR UPDATE',[$attempt['pago_id']])->get_result()->fetch_assoc();
             $reservation = query($this->db,'SELECT * FROM reservas WHERE id=? FOR UPDATE',[$payment['reserva_id']])->get_result()->fetch_assoc();
             if ($payment['metodo'] !== 'Pasarela QR' || ($attempt['id_proveedor'] && $attempt['id_proveedor'] !== $providerId)

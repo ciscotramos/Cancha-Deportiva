@@ -1,4 +1,22 @@
 # Arena 7 con Docker: docker compose up -d  →  https://localhost:8443/
+x-app-env: &app-env
+  DB_HOST: db
+  DB_NAME: cancha_deportiva
+  DB_USER: arena7
+  DB_PASSWORD: arena7_local
+  PRIVATE_DATA_OWNER: admin@arena7.com
+  # Se leen del archivo .env (no se sube a GitHub). Vacíos = función desactivada.
+  RENIEC_TOKEN: ${RENIEC_TOKEN:-}
+  GMAIL_ADDRESS: ${GMAIL_ADDRESS:-}
+  GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+  MP_MODE: ${MP_MODE:-prueba}
+  MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}
+  MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+  TAYPI_MODE: ${TAYPI_MODE:-sandbox}
+  TAYPI_PUBLIC_KEY: ${TAYPI_PUBLIC_KEY:-}
+  TAYPI_SECRET_KEY: ${TAYPI_SECRET_KEY:-}
+  TAYPI_WEBHOOK_SECRET: ${TAYPI_WEBHOOK_SECRET:-}
+
 services:
   db:
     image: mariadb:11
@@ -15,27 +33,22 @@ services:
   app:
     build: ./docker
     command: sh /app/docker/start-app.sh
-    environment:
-      DB_HOST: db
-      DB_NAME: cancha_deportiva
-      DB_USER: arena7
-      DB_PASSWORD: arena7_local
-      PRIVATE_DATA_OWNER: admin@arena7.com
-      # Se leen del archivo .env (no se sube a GitHub). Vacíos = función desactivada.
-      RENIEC_TOKEN: ${RENIEC_TOKEN:-}
-      GMAIL_ADDRESS: ${GMAIL_ADDRESS:-}
-      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
-      MP_MODE: ${MP_MODE:-prueba}
-      MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}
-      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
-      TAYPI_MODE: ${TAYPI_MODE:-sandbox}
-      TAYPI_PUBLIC_KEY: ${TAYPI_PUBLIC_KEY:-}
-      TAYPI_SECRET_KEY: ${TAYPI_SECRET_KEY:-}
-      TAYPI_WEBHOOK_SECRET: ${TAYPI_WEBHOOK_SECRET:-}
+    environment: *app-env
     volumes:
       - ./:/app
     depends_on:
       - db
+    restart: unless-stopped
+
+  # Mensajería asíncrona: procesa la cola de notificaciones cada minuto (hasta 3 intentos por correo).
+  notificaciones:
+    build: ./docker
+    command: sh -c 'until php -r "new mysqli(getenv(\"DB_HOST\"),getenv(\"DB_USER\"),getenv(\"DB_PASSWORD\"),getenv(\"DB_NAME\"));" 2>/dev/null; do sleep 3; done; while true; do php /app/bin/notificaciones.php; sleep 60; done'
+    environment: *app-env
+    volumes:
+      - ./:/app
+    depends_on:
+      - app
     restart: unless-stopped
 
   web:

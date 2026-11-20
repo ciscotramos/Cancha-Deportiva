@@ -22,7 +22,7 @@ final class TaypiGateway {
     }
 
     public function createPayment(string $amount, string $reference): array {
-        if (!self::configured()) throw new ApiError('La pasarela todavía no está configurada.', 503);
+        if (!self::configured()) throw new ApiError('La pasarela todavía no está configurada.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         $path = '/api/v1/payments';
         $body = json_encode([
             'amount'=>$amount, 'currency'=>'PEN', 'reference'=>$reference,

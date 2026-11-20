@@ -24,6 +24,12 @@ $db->query("CREATE TABLE IF NOT EXISTS pasarela_pagos (id INT AUTO_INCREMENT PRI
 foreach(query($db,'SELECT id,password FROM usuarios')->get_result()->fetch_all(MYSQLI_ASSOC) as $u) {
     if(password_get_info($u['password'])['algo']===null) query($db,'UPDATE usuarios SET password=? WHERE id=?',[password_hash($u['password'],PASSWORD_DEFAULT),$u['id']]);
 }
+// Cadena de integridad de la auditoría (SHA-256 encadenado).
+foreach(['hash'=>'CHAR(64) NULL','hash_anterior'=>'CHAR(64) NULL'] as $col=>$def) {
+    if(!query($db,"SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='auditoria' AND COLUMN_NAME=?",[$col])->get_result()->num_rows) $db->query("ALTER TABLE auditoria ADD COLUMN $col $def");
+}
+$db->query("CREATE TABLE IF NOT EXISTS auditoria_cadena (id TINYINT PRIMARY KEY,ultimo_hash CHAR(64) NULL) ENGINE=InnoDB");
+$db->query("INSERT IGNORE INTO auditoria_cadena (id,ultimo_hash) VALUES (1,NULL)");
 foreach(['UPDATE','DELETE'] as $verb) {
     $name='auditoria_no_'.strtolower($verb);
     if(!query($db,'SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME=?',[$name])->get_result()->num_rows) $db->query("CREATE TRIGGER $name BEFORE $verb ON auditoria FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Auditoria: solo inserciones permitidas'");

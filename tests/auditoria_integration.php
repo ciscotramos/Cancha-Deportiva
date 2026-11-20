@@ -3,7 +3,7 @@
 require __DIR__.'/../services/bootstrap.php';
 require __DIR__.'/../services/LegacyReservationService.php';
 
-foreach (['reservas', 'auditoria', 'pagos', 'notificaciones'] as $table) {
+foreach (['reservas', 'auditoria','auditoria_cadena', 'pagos', 'notificaciones'] as $table) {
     $definition = $db->query("SHOW CREATE TABLE `$table`")->fetch_row()[1];
     $db->query(str_replace("CREATE TABLE `$table`", "CREATE TEMPORARY TABLE `$table`", $definition));
 }
@@ -54,4 +54,11 @@ check(count($rows) === 1, 'El filtro de auditoría no devolvió la cancelación.
 check((new AuditService($db))->list(['before_id'=>$rows[0]['id'], 'accion'=>'RESERVA_CANCELAR']) === [],
     'La paginación de auditoría falló.');
 
-echo "Auditoría: crear, evitar duplicado, editar, cancelar, filtrar y paginar OK.\n";
+$verificacion = (new AuditService($db))->verificar();
+check($verificacion['integra'] && $verificacion['eventos_verificados'] > 0, 'La cadena de auditoría no quedó íntegra.');
+// La tabla temporal no tiene los disparadores de solo inserción: simula una alteración manual.
+$db->query("UPDATE auditoria SET detalle='alterado' WHERE id=(SELECT id FROM (SELECT MIN(id) id FROM auditoria) x)");
+$alterada = (new AuditService($db))->verificar();
+check(!$alterada['integra'] && $alterada['primer_evento_alterado'] !== null, 'La verificación no detectó la alteración.');
+
+echo "Auditoría: crear, evitar duplicado, editar, cancelar, filtrar, paginar y cadena hash íntegra/alterada OK.\n";

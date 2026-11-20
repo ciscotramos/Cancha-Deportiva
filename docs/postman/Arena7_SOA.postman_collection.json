@@ -1,0 +1,1134 @@
+{
+  "info": {
+    "_postman_id": "88d1eecb-7934-4f2d-bbf2-67aaa85e9132",
+    "name": "Arena 7 - Servicios SOA (APF3)",
+    "description": "Prueba de los servicios REST/JSON de Arena 7. Ejecutar en orden (Run collection). En Postman desactivar 'SSL certificate verification' porque el certificado local lo emite Caddy.\nContrato: https://localhost:8443/docs/openapi.yaml",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:8443/api.php"
+    },
+    {
+      "key": "correo",
+      "value": "admin@arena7.com"
+    },
+    {
+      "key": "clave",
+      "value": "Arena7#2026"
+    },
+    {
+      "key": "celularYape",
+      "value": "111111111"
+    },
+    {
+      "key": "otpYape",
+      "value": "123456"
+    },
+    {
+      "key": "dniPrueba",
+      "value": "77052685"
+    }
+  ],
+  "item": [
+    {
+      "name": "SRV-001 Autenticación",
+      "item": [
+        {
+          "name": "Obtener CAPTCHA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/captcha",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "captcha"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200 y pregunta CAPTCHA\", () => { pm.response.to.have.status(200); pm.expect(r.pregunta).to.match(/\\d+ \\+ \\d+/); });",
+                  "const m = r.pregunta.match(/(\\d+) \\+ (\\d+)/);",
+                  "pm.collectionVariables.set(\"captcha\", String(Number(m[1]) + Number(m[2])));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"clave\": \"{{clave}}\",\n  \"captcha\": \"{{captcha}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: sesión abierta con rol\", () => { pm.response.to.have.status(200); pm.expect(r.user.rol).to.eql(\"administrador\"); });",
+                  "pm.test(\"Devuelve token CSRF\", () => pm.expect(r.csrf).to.have.lengthOf(64));",
+                  "pm.collectionVariables.set(\"csrf\", r.csrf);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar sesión",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: sesión vigente\", () => { pm.response.to.have.status(200); pm.expect(r.user.correo).to.eql(pm.collectionVariables.get(\"correo\")); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SRV-006 Registro de servicios (UDDI)",
+      "item": [
+        {
+          "name": "Descubrir servicios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "registro"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: catálogo con 6 servicios\", () => { pm.response.to.have.status(200); pm.expect(r.servicios).to.have.lengthOf(6); });",
+                  "pm.test(\"Cada servicio publica contrato y operaciones\", () => r.servicios.forEach(s => { pm.expect(s.contrato).to.eql(\"/docs/openapi.yaml\"); pm.expect(s.operaciones.length).to.be.above(0); }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar servicio de pagos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/registro?q=pago",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "registro"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "pago"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"Encuentra SRV-003\", () => pm.expect(r.servicios.map(s => s.id)).to.include(\"SRV-003\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Descripción técnica SRV-003",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/registro/SRV-003",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "registro",
+                "SRV-003"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: ficha técnica\", () => { pm.response.to.have.status(200); pm.expect(r.estilo).to.eql(\"REST\"); pm.expect(r.formato).to.eql(\"JSON\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Servicio inexistente (error)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/registro/SRV-999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "registro",
+                "SRV-999"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"404 SERVICIO_NO_ENCONTRADO\", () => { pm.response.to.have.status(404); pm.expect(r.codigo).to.eql(\"SERVICIO_NO_ENCONTRADO\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SRV-002 Reserva de Cancha",
+      "item": [
+        {
+          "name": "Consultar identidad por DNI (RENIEC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas/dni",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas",
+                "dni"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"{{dniPrueba}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200 con nombre, o 503 si el proveedor no está configurado\", () => {",
+                  "  pm.expect([200, 503]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) pm.expect(r.nombre).to.be.a(\"string\").and.not.empty;",
+                  "  else pm.expect(r.codigo).to.eql(\"PROVEEDOR_DNI_NO_DISPONIBLE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DNI con formato inválido (error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas/dni",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas",
+                "dni"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"422 DNI_INVALIDO\", () => { pm.response.to.have.status(422); pm.expect(r.codigo).to.eql(\"DNI_INVALIDO\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear reserva (Yape Mercado Pago)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"{{dniPrueba}}\",\n  \"cliente\": \"CLIENTE DE PRUEBA POSTMAN\",\n  \"telefono\": \"987654321\",\n  \"email\": \"\",\n  \"cancha\": \"{{cancha}}\",\n  \"deporte\": \"Fútbol\",\n  \"fecha\": \"{{fecha}}\",\n  \"hora\": \"{{hora}}\",\n  \"pago\": \"Yape (Mercado Pago)\",\n  \"monto\": \"{{monto}}\",\n  \"pagoRecibido\": \"0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = new Date(Date.now() + (20 + Math.floor(Math.random() * 300)) * 86400000);",
+                  "pm.collectionVariables.set(\"fecha\", d.toISOString().slice(0, 10));",
+                  "pm.collectionVariables.set(\"cancha\", String(1 + Math.floor(Math.random() * 4)));",
+                  "pm.collectionVariables.set(\"hora\", \"19\");",
+                  "pm.collectionVariables.set(\"monto\", \"60.00\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"201: reserva Pendiente con bloqueo de 10 minutos\", () => { pm.response.to.have.status(201); pm.expect(r.estado).to.eql(\"Pendiente\"); pm.expect(r.hold_until).to.be.a(\"string\"); });",
+                  "pm.test(\"El monto lo fija el servidor según la tarifa\", () => pm.expect(r.monto).to.eql(\"60.00\"));",
+                  "pm.collectionVariables.set(\"reservaId\", r.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear en el mismo horario (error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"12345678\",\n  \"cliente\": \"OTRO CLIENTE\",\n  \"telefono\": \"912345678\",\n  \"cancha\": \"{{cancha}}\",\n  \"fecha\": \"{{fecha}}\",\n  \"hora\": \"{{hora}}\",\n  \"pago\": \"Efectivo\",\n  \"monto\": \"{{monto}}\",\n  \"pagoRecibido\": \"0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"409 CANCHA_NO_DISPONIBLE\", () => { pm.response.to.have.status(409); pm.expect(r.codigo).to.eql(\"CANCHA_NO_DISPONIBLE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Monto distinto a la tarifa (error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"12345678\",\n  \"cliente\": \"OTRO CLIENTE\",\n  \"telefono\": \"912345678\",\n  \"cancha\": \"{{cancha}}\",\n  \"fecha\": \"{{fecha}}\",\n  \"hora\": \"08\",\n  \"pago\": \"Efectivo\",\n  \"monto\": \"1.00\",\n  \"pagoRecibido\": \"0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"422 MONTO_INVALIDO\", () => { pm.response.to.have.status(422); pm.expect(r.codigo).to.eql(\"MONTO_INVALIDO\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar reservas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: incluye la reserva creada\", () => { pm.response.to.have.status(200); pm.expect(r.map(x => Number(x.id))).to.include(Number(pm.collectionVariables.get(\"reservaId\"))); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SRV-003 Gestión de Pagos",
+      "item": [
+        {
+          "name": "Confirmar a mano un pago de pasarela (error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/{{pagoId}}/confirmar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagos",
+                "{{pagoId}}",
+                "confirmar"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigoPago\": \"MANUAL-1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.sendRequest({url: pm.collectionVariables.get(\"baseUrl\") + \"/pagos\", method: \"GET\", header: {Accept: \"application/json\"}}, (e, res) => {",
+                  "  const pago = res.json().find(p => Number(p.reserva_id) === Number(pm.collectionVariables.get(\"reservaId\")));",
+                  "  pm.collectionVariables.set(\"pagoId\", pago.id);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"409 ESTADO_NO_PERMITIDO: solo el proveedor confirma\", () => { pm.response.to.have.status(409); pm.expect(r.codigo).to.eql(\"ESTADO_NO_PERMITIDO\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cobrar con Yape (Mercado Pago)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas/{{reservaId}}/yape",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas",
+                "{{reservaId}}",
+                "yape"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"celular\": \"{{celularYape}}\",\n  \"otp\": \"{{otpYape}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: pago aprobado y reserva confirmada\", () => { pm.response.to.have.status(200); pm.expect(r.estado).to.eql(\"aprobado\"); pm.expect(r.operacion).to.be.a(\"string\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repetir el cobro (idempotencia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas/{{reservaId}}/yape",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas",
+                "{{reservaId}}",
+                "yape"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"celular\": \"{{celularYape}}\",\n  \"otp\": \"{{otpYape}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"No vuelve a cobrar una reserva pagada\", () => { pm.response.to.have.status(200); pm.expect(r.mensaje).to.include(\"ya estaba pagada\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Celular inválido (error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas/{{reservaId}}/yape",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas",
+                "{{reservaId}}",
+                "yape"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"celular\": \"123\",\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"422 DATOS_INVALIDOS\", () => { pm.response.to.have.status(422); pm.expect(r.codigo).to.eql(\"DATOS_INVALIDOS\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar pagos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagos"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: lista de pagos\", () => { pm.response.to.have.status(200); pm.expect(r).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SRV-004 Notificaciones",
+      "item": [
+        {
+          "name": "Estado de notificaciones de la reserva",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notificaciones?reserva_id={{reservaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notificaciones"
+              ],
+              "query": [
+                {
+                  "key": "reserva_id",
+                  "value": "{{reservaId}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: lista de notificaciones\", () => { pm.response.to.have.status(200); pm.expect(r).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SRV-005 Auditoría",
+      "item": [
+        {
+          "name": "Historial de la reserva",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auditoria?reserva_id={{reservaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auditoria"
+              ],
+              "query": [
+                {
+                  "key": "reserva_id",
+                  "value": "{{reservaId}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: registra la creación de la reserva\", () => { pm.response.to.have.status(200); pm.expect(r.map(e => e.accion)).to.include(\"RESERVA_CREAR\"); });",
+                  "pm.test(\"Cada evento tiene hash SHA-256\", () => r.forEach(e => pm.expect(e.hash).to.match(/^[a-f0-9]{64}$/)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verificar integridad de la cadena",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auditoria/verificar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auditoria",
+                "verificar"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"200: cadena íntegra\", () => { pm.response.to.have.status(200); pm.expect(r.integra).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Seguridad",
+      "item": [
+        {
+          "name": "Operación sin token CSRF (error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas/dni",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas",
+                "dni"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"12345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"403 CSRF_INVALIDO\", () => { pm.response.to.have.status(403); pm.expect(r.codigo).to.eql(\"CSRF_INVALIDO\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200: sesión cerrada\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar reservas sin sesión (error)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservas"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test(\"401 SESION_INVALIDA\", () => { pm.response.to.have.status(401); pm.expect(r.codigo).to.eql(\"SESION_INVALIDA\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

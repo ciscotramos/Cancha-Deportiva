@@ -21,7 +21,7 @@ final class MercadoPagoGateway implements PasarelaPagoYape {
 
     public function cobrarYape(string $monto, string $referencia, string $celular, string $otp,
                                string $correo, string $claveIdempotencia): array {
-        if (!$this->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503);
+        if (!$this->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
 
         // Paso 1: token de Yape (solo usa la clave pública).
         [$code, $token] = $this->post(
@@ -31,7 +31,7 @@ final class MercadoPagoGateway implements PasarelaPagoYape {
         );
         if ($code < 200 || $code >= 300 || !is_string($token['id'] ?? null) || $token['id'] === '') {
             error_log('Mercado Pago token Yape HTTP '.$code);
-            throw new ApiError('Yape no aceptó el celular o el código de aprobación. Pida al cliente un código nuevo e intente otra vez.', 422);
+            throw new ApiError('Yape no aceptó el celular o el código de aprobación. Pida al cliente un código nuevo e intente otra vez.', 422, 'PAGO_RECHAZADO');
         }
 
         // Paso 2: pago. El importe lo fija el servidor, nunca el navegador.
@@ -49,10 +49,10 @@ final class MercadoPagoGateway implements PasarelaPagoYape {
                 'payer'=>['email'=>$correo],
             ]
         );
-        if ($code === 401 || $code === 403) throw new ApiError('Las credenciales de Mercado Pago no son válidas.', 502);
+        if ($code === 401 || $code === 403) throw new ApiError('Las credenciales de Mercado Pago no son válidas.', 502, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         if ($code < 200 || $code >= 300 || !isset($pago['id'], $pago['status'])) {
             error_log('Mercado Pago pago HTTP '.$code.' '.json_encode($pago['cause'] ?? $pago['message'] ?? ''));
-            throw new ApiError('Mercado Pago no pudo procesar el cobro. Intente otra vez.', 502);
+            throw new ApiError('Mercado Pago no pudo procesar el cobro. Intente otra vez.', 502, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         }
 
         $estado = match ($pago['status']) {
@@ -99,7 +99,7 @@ final class MercadoPagoGateway implements PasarelaPagoYape {
         curl_close($ch);
         if ($raw === false) {
             error_log('Mercado Pago conexión: '.$error);
-            throw new ApiError('No se pudo conectar con Mercado Pago; vuelva a intentar.', 502);
+            throw new ApiError('No se pudo conectar con Mercado Pago; vuelva a intentar.', 502, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         }
         $json = json_decode($raw, true);
         return [$code, is_array($json) ? $json : []];

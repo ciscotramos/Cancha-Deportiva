@@ -26,7 +26,7 @@ final class PasarelaYapeSimulada implements PasarelaPagoYape {
     }
 }
 
-foreach (['reservas','pagos','pasarela_pagos','auditoria','notificaciones'] as $table) {
+foreach (['reservas','pagos','pasarela_pagos','auditoria','auditoria_cadena','notificaciones'] as $table) {
     $definition = $db->query("SHOW CREATE TABLE `$table`")->fetch_row()[1];
     $db->query(str_replace("CREATE TABLE `$table`", "CREATE TEMPORARY TABLE `$table`", $definition));
 }

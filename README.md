@@ -202,3 +202,16 @@ Flujo: `PasarelaPagoYape::cobrarYape()` → token de Yape (`/platforms/pci/yape/
 `php tests/yape_mercadopago_integration.php` verifica importe, rechazo, aprobación, idempotencia y auditoría con un proveedor simulado que cumple el mismo contrato.
 
 Plin no está disponible en Mercado Pago; sigue como pago manual.
+
+## Registro de servicios, contrato y pruebas (APF3)
+
+- **Contrato OpenAPI 3.0:** `docs/openapi.yaml` (16 rutas). Se publica en `https://localhost:8443/docs/openapi.yaml` y se puede importar en Postman o Swagger UI.
+- **Registro de servicios (función de UDDI):** `GET /api.php/registro` lista los servicios (SRV-001 a SRV-006) con su capa, operaciones, seguridad, proveedores externos y enlace al contrato; `?q=pago` busca y `GET /api.php/registro/SRV-003` devuelve la ficha técnica. Requiere sesión: el catálogo no se expone sin autenticación.
+- **Errores del contrato:** toda respuesta de error trae `{"error": "...", "codigo": "..."}` con los códigos del diseño (por ejemplo `CANCHA_NO_DISPONIBLE`, `DNI_INVALIDO`, `PAGO_RECHAZADO`, `SESION_INVALIDA`, `CSRF_INVALIDO`).
+- **Auditoría encadenada:** cada evento guarda un hash SHA-256 del anterior; `GET /api.php/auditoria/verificar` recalcula la cadena y señala el primer evento alterado.
+- **Mensajería asíncrona:** el contenedor `notificaciones` procesa la cola de correos cada minuto.
+- **Postman:** importe `docs/postman/Arena7_SOA.postman_collection.json`, desactive *SSL certificate verification* (certificado local de Caddy) y use *Run collection*. La colección resuelve el CAPTCHA, guarda el token CSRF y prueba casos correctos y de error. Por línea de comandos:
+
+  ```bash
+  npx newman run docs/postman/Arena7_SOA.postman_collection.json --insecure
+  ```

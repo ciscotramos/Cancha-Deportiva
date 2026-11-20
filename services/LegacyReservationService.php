@@ -29,10 +29,10 @@ class LegacyReservationService {
             throw new ApiError('Revise los datos de la reserva.');
         }
         if ($pago === 'Pasarela QR' && !TaypiGateway::configured()) {
-            throw new ApiError('La pasarela todavía no está configurada.', 503);
+            throw new ApiError('La pasarela todavía no está configurada.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         }
         if ($pago === PagosAutomaticos::YAPE_MP && !(new MercadoPagoGateway())->configurada()) {
-            throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503);
+            throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
         }
         if (PagosAutomaticos::es($pago) && $codigo !== '') throw new ApiError('El código de la pasarela lo genera el proveedor.');
         return [$dni, $cliente, $telefono, $cancha, $fecha, $hora, $pago, $codigo, $monto, $detalle, $email];
@@ -40,7 +40,7 @@ class LegacyReservationService {
 
     private function lock(): void {
         if (!query($this->db, "SELECT GET_LOCK('arena7_reservas',5) AS locked")->get_result()->fetch_assoc()['locked']) {
-            throw new ApiError('Sistema ocupado, vuelva a intentar.', 409);
+            throw new ApiError('Sistema ocupado, vuelva a intentar.', 409, 'SISTEMA_OCUPADO');
         }
     }
 
@@ -49,7 +49,7 @@ class LegacyReservationService {
             "SELECT id FROM reservas WHERE cancha=? AND fecha=? AND hora=? AND id<>? AND (estado='Confirmado' OR (estado='Pendiente' AND hold_until>NOW())) LIMIT 1",
             [$fields[3], $fields[4], $fields[5], $id ?? 0]
         )->get_result()->fetch_assoc();
-        if ($busy) throw new ApiError('La cancha ya está reservada en ese horario.', 409);
+        if ($busy) throw new ApiError('La cancha ya está reservada en ese horario.', 409, 'CANCHA_NO_DISPONIBLE');
     }
 
     public function create(array $input, array $user): int {
@@ -101,14 +101,14 @@ class LegacyReservationService {
         try {
             transaction($this->db, function () use ($id, $fields, $user, $source) {
                 $old = query($this->db, 'SELECT * FROM reservas WHERE id=? FOR UPDATE', [$id])->get_result()->fetch_assoc();
-                if (!$old || $old['estado'] === 'Cancelado') throw new ApiError('Reserva no encontrada.', 404);
+                if (!$old || $old['estado'] === 'Cancelado') throw new ApiError('Reserva no encontrada.', 404, 'RESERVA_NO_ENCONTRADA');
                 if ($old['estado'] === 'Pendiente' && $old['hold_until'] && strtotime($old['hold_until']) < time()) {
-                    throw new ApiError('Esta reserva ya venció y no se puede editar.', 409);
+                    throw new ApiError('Esta reserva ya venció y no se puede editar.', 409, 'ESTADO_NO_PERMITIDO');
                 }
                 $payment = query($this->db, 'SELECT id FROM pagos WHERE reserva_id=? LIMIT 1', [$id])->get_result()->fetch_assoc();
                 if ($payment && ($old['pago'] !== $fields[6] || $old['codigo_pago'] !== $fields[7]
                     || (float)$old['monto'] !== (float)$fields[8])) {
-                    throw new ApiError('El pago registrado no puede alterarse desde la edición de reserva.');
+                    throw new ApiError('El pago registrado no puede alterarse desde la edición de reserva.', 422, 'ESTADO_NO_PERMITIDO');
                 }
                 $this->available($fields, $id);
                 query($this->db,
@@ -129,7 +129,7 @@ class LegacyReservationService {
     public function cancel(int $id, array $user): void {
         transaction($this->db, function () use ($id, $user) {
             $old = query($this->db, 'SELECT estado FROM reservas WHERE id=? FOR UPDATE', [$id])->get_result()->fetch_assoc();
-            if (!$old || $old['estado'] === 'Cancelado') throw new ApiError('Reserva no encontrada.', 404);
+            if (!$old || $old['estado'] === 'Cancelado') throw new ApiError('Reserva no encontrada.', 404, 'RESERVA_NO_ENCONTRADA');
             query($this->db, "UPDATE reservas SET estado='Cancelado',hold_until=NULL WHERE id=?", [$id]);
             query($this->db, "UPDATE pagos SET estado='Cancelado' WHERE reserva_id=? AND estado='Pendiente'", [$id]);
             query($this->db, "UPDATE notificaciones SET estado='Cancelado' WHERE reserva_id=? AND estado IN ('Pendiente','Error')", [$id]);

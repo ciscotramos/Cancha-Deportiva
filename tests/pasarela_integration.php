@@ -19,7 +19,7 @@ function signedWebhook(GatewayPaymentService $service, array $event): array {
     $body=json_encode($event,JSON_THROW_ON_ERROR);
     return $service->webhook($body,'sha256='.hash_hmac('sha256',$body,cfg('TAYPI_WEBHOOK_SECRET')),(string)time());
 }
-foreach (['reservas','pagos','pasarela_pagos','auditoria','notificaciones'] as $table) {
+foreach (['reservas','pagos','pasarela_pagos','auditoria','auditoria_cadena','notificaciones'] as $table) {
     $definition=$db->query("SHOW CREATE TABLE `$table`")->fetch_row()[1];
     $db->query(str_replace("CREATE TABLE `$table`","CREATE TEMPORARY TABLE `$table`",$definition));
 }

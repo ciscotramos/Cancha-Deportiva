@@ -1,0 +1,283 @@
+openapi: 3.0.3
+info:
+  title: Arena 7 - Servicios de reserva de canchas
+  version: "1.0"
+  description: |
+    Contrato de los servicios REST/JSON de Arena 7 (AC-S15-APF3).
+    Todas las rutas se sirven solo por HTTPS. Salvo el CAPTCHA y el inicio de sesión,
+    requieren la cookie de sesión; las operaciones que modifican datos exigen además
+    la cabecera X-CSRF-Token devuelta por /auth/login o /auth/me.
+    Los errores responden {"error": "mensaje", "codigo": "CODIGO_DEL_CONTRATO"}.
+servers:
+  - url: https://localhost:8443/api.php
+    description: Docker local (Caddy con TLS)
+tags:
+  - name: SRV-001 Autenticación
+  - name: SRV-002 Reserva de Cancha
+  - name: SRV-003 Gestión de Pagos
+  - name: SRV-004 Notificaciones
+  - name: SRV-005 Auditoría
+  - name: SRV-006 Registro de servicios
+components:
+  securitySchemes:
+    sesion:
+      type: apiKey
+      in: cookie
+      name: PHPSESSID
+    csrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  schemas:
+    Error:
+      type: object
+      required: [error, codigo]
+      properties:
+        error: {type: string, example: La cancha ya está reservada en ese horario.}
+        codigo:
+          type: string
+          enum: [DATOS_INVALIDOS, DNI_INVALIDO, CANCHA_NO_DISPONIBLE, RESERVA_NO_ENCONTRADA,
+                 ESTADO_NO_PERMITIDO, CREDENCIALES_INVALIDAS, LIMITE_INTENTOS, SESION_INVALIDA,
+                 ACCESO_DENEGADO, CSRF_INVALIDO, CODIGO_OPERACION_DUPLICADO, PAGO_YA_REGISTRADO,
+                 PAGO_NO_ENCONTRADO, MONTO_INVALIDO, METODO_NO_PERMITIDO, PAGO_RECHAZADO,
+                 PROVEEDOR_DNI_NO_DISPONIBLE, PROVEEDOR_PAGO_NO_DISPONIBLE, PROVEEDOR_NO_DISPONIBLE,
+                 SISTEMA_OCUPADO, SERVICIO_NO_ENCONTRADO, RUTA_NO_ENCONTRADA, CONFLICTO,
+                 NO_ENCONTRADO, ERROR_INTERNO]
+    Reserva:
+      type: object
+      properties:
+        id: {type: integer, example: 15}
+        dni: {type: string, pattern: '^\d{8}$', example: '12345678'}
+        cliente: {type: string, example: PEREZ ROJAS ANA}
+        telefono: {type: string, example: '987654321'}
+        email: {type: string, format: email}
+        cancha: {type: string, enum: ['1', '2', '3', '4']}
+        deporte: {type: string, enum: [Fútbol, Vóley]}
+        fecha: {type: string, format: date}
+        hora: {type: string, enum: ['08','09','10','11','12','13','14','15','16','18','19','20','21']}
+        pago: {type: string, enum: [Yape, Plin, Efectivo, Yape (Mercado Pago), Pasarela QR]}
+        monto: {type: string, example: '60.00'}
+        estado: {type: string, enum: [Pendiente, Confirmado, Cancelado, Vencido]}
+        hold_until: {type: string, nullable: true, description: Fin del bloqueo de 10 minutos}
+    NuevaReserva:
+      type: object
+      required: [dni, cliente, telefono, cancha, fecha, hora, pago, monto]
+      properties:
+        dni: {type: string, pattern: '^\d{8}$'}
+        cliente: {type: string, maxLength: 150}
+        telefono: {type: string, pattern: '^[+0-9 ()-]{9,20}$'}
+        email: {type: string, format: email}
+        cancha: {type: string, enum: ['1', '2', '3', '4']}
+        deporte: {type: string, enum: [Fútbol, Vóley], default: Fútbol}
+        fecha: {type: string, format: date, description: No puede ser una fecha pasada}
+        hora: {type: string, example: '19'}
+        pago: {type: string, enum: [Yape, Plin, Efectivo, Yape (Mercado Pago)]}
+        monto: {type: string, description: 'Debe coincidir con la tarifa (S/ 40 de 08 a 16 h, S/ 60 de 18 a 21 h)'}
+        pagoRecibido: {type: string, enum: ['0', '1'], default: '0'}
+        codigoPago: {type: string, maxLength: 100}
+security:
+  - sesion: []
+paths:
+  /auth/captcha:
+    get:
+      tags: [SRV-001 Autenticación]
+      summary: Obtener una pregunta CAPTCHA (válida 5 minutos)
+      security: []
+      responses:
+        '200':
+          description: Pregunta generada
+          content: {application/json: {example: {pregunta: 'CAPTCHA: ¿Cuánto es 2 + 4?'}}}
+  /auth/login:
+    post:
+      tags: [SRV-001 Autenticación]
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [correo, clave, captcha]
+              properties:
+                correo: {type: string, format: email}
+                clave: {type: string}
+                captcha: {type: string}
+      responses:
+        '200':
+          description: Sesión abierta
+          content: {application/json: {example: {user: {id: 1, correo: admin@arena7.com, rol: administrador}, csrf: 64-hex}}}
+        '401': {description: CREDENCIALES_INVALIDAS, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429': {description: LIMITE_INTENTOS (10 fallos en 15 minutos), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /auth/me:
+    get:
+      tags: [SRV-001 Autenticación]
+      summary: Consultar la sesión y el token CSRF
+      responses:
+        '200': {description: Sesión vigente}
+        '401': {description: SESION_INVALIDA, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /auth/logout:
+    post:
+      tags: [SRV-001 Autenticación]
+      summary: Cerrar sesión
+      security: [{sesion: [], csrf: []}]
+      responses:
+        '200': {description: Sesión cerrada}
+  /reservas:
+    get:
+      tags: [SRV-002 Reserva de Cancha]
+      summary: Listar reservas
+      responses:
+        '200':
+          description: Lista de reservas
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Reserva'}}}}
+    post:
+      tags: [SRV-002 Reserva de Cancha]
+      summary: Crear una reserva pendiente y bloquear el horario 10 minutos
+      security: [{sesion: [], csrf: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NuevaReserva'}}}
+      responses:
+        '201': {description: Reserva creada, content: {application/json: {schema: {$ref: '#/components/schemas/Reserva'}}}}
+        '409': {description: CANCHA_NO_DISPONIBLE, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: 'DATOS_INVALIDOS, DNI_INVALIDO, MONTO_INVALIDO o METODO_NO_PERMITIDO', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /reservas/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: integer}}
+    put:
+      tags: [SRV-002 Reserva de Cancha]
+      summary: Actualizar los datos de una reserva vigente
+      security: [{sesion: [], csrf: []}]
+      requestBody:
+        content: {application/json: {schema: {$ref: '#/components/schemas/NuevaReserva'}}}
+      responses:
+        '200': {description: Reserva actualizada}
+        '404': {description: RESERVA_NO_ENCONTRADA}
+        '409': {description: ESTADO_NO_PERMITIDO o CANCHA_NO_DISPONIBLE}
+    delete:
+      tags: [SRV-002 Reserva de Cancha]
+      summary: Cancelar la reserva y liberar el horario (compensación)
+      security: [{sesion: [], csrf: []}]
+      responses:
+        '200': {description: Reserva cancelada}
+        '404': {description: RESERVA_NO_ENCONTRADA}
+  /reservas/dni:
+    post:
+      tags: [SRV-002 Reserva de Cancha]
+      summary: Consultar nombres y apellidos por DNI (proveedor Decolecta - RENIEC)
+      description: El DNI viaja en el cuerpo y no en la URL para no quedar en registros de acceso.
+      security: [{sesion: [], csrf: []}]
+      requestBody:
+        content: {application/json: {schema: {type: object, required: [dni], properties: {dni: {type: string, pattern: '^\d{8}$'}}}}}
+      responses:
+        '200':
+          description: Identidad encontrada
+          content: {application/json: {example: {dni: '12345678', nombre: PEREZ ROJAS ANA, fuente: Decolecta, consultado: true, identidad_confirmada: false}}}
+        '422': {description: DNI_INVALIDO}
+        '503': {description: PROVEEDOR_DNI_NO_DISPONIBLE}
+  /reservas/contacto:
+    post:
+      tags: [SRV-002 Reserva de Cancha]
+      summary: Sugerir el último celular registrado para un DNI
+      security: [{sesion: [], csrf: []}]
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {dni: {type: string}}}}}
+      responses:
+        '200': {description: Celular sugerido o vacío}
+  /reservas/{id}/yape:
+    post:
+      tags: [SRV-003 Gestión de Pagos]
+      summary: Cobrar la reserva con Yape mediante Mercado Pago
+      description: |
+        Orquesta token Yape → pago → confirmación de la reserva → notificación → auditoría.
+        El importe lo fija el servidor según la tarifa. La clave de idempotencia evita un segundo cobro.
+      security: [{sesion: [], csrf: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [celular, otp]
+              properties:
+                celular: {type: string, pattern: '^\d{9}$', example: '111111111'}
+                otp: {type: string, pattern: '^\d{6}$', example: '123456'}
+      responses:
+        '200':
+          description: Resultado del cobro (aprobado, rechazado, en_proceso o revisar)
+          content:
+            application/json:
+              examples:
+                aprobado: {value: {estado: aprobado, operacion: '1325467890', mensaje: Pago aprobado. Reserva confirmada.}}
+                rechazado: {value: {estado: rechazado, codigo: PAGO_RECHAZADO, operacion: '1325467891', mensaje: Yape no autorizó el pago.}}
+        '409': {description: ESTADO_NO_PERMITIDO o SISTEMA_OCUPADO}
+        '422': {description: DATOS_INVALIDOS o PAGO_RECHAZADO (token Yape no aceptado)}
+        '502': {description: PROVEEDOR_PAGO_NO_DISPONIBLE}
+  /pagos:
+    get:
+      tags: [SRV-003 Gestión de Pagos]
+      summary: Listar pagos (últimos 500)
+      responses:
+        '200': {description: Lista de pagos}
+  /pagos/{id}/confirmar:
+    post:
+      tags: [SRV-003 Gestión de Pagos]
+      summary: Confirmar un pago manual (efectivo, Yape o Plin personal)
+      security: [{sesion: [], csrf: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {codigoPago: {type: string}}}}}
+      responses:
+        '200': {description: 'Pago confirmado {ok: true, comprobante: PAGO-15}'}
+        '409': {description: 'ESTADO_NO_PERMITIDO, PAGO_YA_REGISTRADO o CODIGO_OPERACION_DUPLICADO'}
+  /notificaciones:
+    get:
+      tags: [SRV-004 Notificaciones]
+      summary: Consultar el estado de envío de las notificaciones
+      parameters:
+        - {name: reserva_id, in: query, schema: {type: integer}}
+      responses:
+        '200': {description: 'Lista con evento, destinatario, estado (Pendiente, Enviado, Fallido, Cancelado, Sin correo), intentos'}
+  /auditoria:
+    get:
+      tags: [SRV-005 Auditoría]
+      summary: Consultar el historial de eventos (solo administrador)
+      parameters:
+        - {name: usuario, in: query, schema: {type: string}}
+        - {name: accion, in: query, schema: {type: string}}
+        - {name: reserva_id, in: query, schema: {type: integer}}
+        - {name: desde, in: query, schema: {type: string, format: date}}
+        - {name: hasta, in: query, schema: {type: string, format: date}}
+        - {name: before_id, in: query, schema: {type: integer}}
+      responses:
+        '200': {description: Hasta 100 eventos}
+        '403': {description: ACCESO_DENEGADO}
+  /auditoria/verificar:
+    get:
+      tags: [SRV-005 Auditoría]
+      summary: Verificar la cadena SHA-256 de la auditoría
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content: {application/json: {example: {integra: true, eventos_verificados: 42, eventos_sin_hash: 0, primer_evento_alterado: null, mensaje: La cadena de auditoría está íntegra.}}}
+  /registro:
+    get:
+      tags: [SRV-006 Registro de servicios]
+      summary: Listar o buscar servicios publicados (función de registro UDDI)
+      parameters:
+        - {name: q, in: query, schema: {type: string}, description: 'Texto a buscar en nombre, dominio o descripción'}
+      responses:
+        '200': {description: 'Catálogo con operaciones, seguridad, capa y proveedores externos'}
+  /registro/{id}:
+    get:
+      tags: [SRV-006 Registro de servicios]
+      summary: Descripción técnica de un servicio
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, example: SRV-003}}
+      responses:
+        '200': {description: Ficha del servicio}
+        '404': {description: SERVICIO_NO_ENCONTRADO}

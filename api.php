@@ -33,6 +33,9 @@ try {
     if(preg_match('#^pagos/(\d+)/confirmar$#',$route,$m)&&$method==='POST') {$auth->admin();respond((new PaymentService($db))->confirm((int)$m[1],$user,isset($input['codigoPago'])?(string)$input['codigoPago']:null));}
     if($route==='notificaciones'&&$method==='GET') respond((new NotificationService($db))->list(isset($_GET['reserva_id'])?(int)$_GET['reserva_id']:null));
     if($route==='auditoria'&&$method==='GET') {$auth->admin();respond((new AuditService($db))->list($_GET));}
-    throw new ApiError('Ruta no encontrada.',404);
-} catch(ApiError $e) {respond(['error'=>$e->getMessage()],$e->status);}
-catch(Throwable $e) {error_log($e);respond(['error'=>'No se pudo completar la operación. Revise el registro del servidor.'],500);}
+    if($route==='auditoria/verificar'&&$method==='GET') {$auth->admin();respond((new AuditService($db))->verificar());}
+    if($route==='registro'&&$method==='GET') respond(ServiceRegistry::buscar((string)($_GET['q']??'')));
+    if(preg_match('#^registro/(SRV-\d{3})$#i',$route,$m)&&$method==='GET') respond(ServiceRegistry::detalle($m[1]));
+    throw new ApiError('Ruta no encontrada.', 404, 'RUTA_NO_ENCONTRADA');
+} catch(ApiError $e) {respond(['error'=>$e->getMessage(),'codigo'=>$e->codigo],$e->status);}
+catch(Throwable $e) {error_log($e);respond(['error'=>'No se pudo completar la operación. Revise el registro del servidor.','codigo'=>'ERROR_INTERNO'],500);}

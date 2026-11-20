@@ -8,21 +8,21 @@ class ReservationService {
     public function save(array $d,array $user,?int $id=null): array {
         foreach(['dni','cliente','telefono','cancha','fecha','hora','pago','monto'] as $k) if(!isset($d[$k])||trim((string)$d[$k])==='') throw new ApiError("Complete el campo $k.");
         if(($d['pago']??'')==='Pasarela QR') {
-            if(!TaypiGateway::configured()) throw new ApiError('La pasarela todavía no está configurada.',503);
+            if(!TaypiGateway::configured()) throw new ApiError('La pasarela todavía no está configurada.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
             if(!empty($d['codigoPago'])) throw new ApiError('El código de la pasarela lo genera el proveedor.');
             if($id===null) $d['monto']=TariffService::amount((string)$d['hora']);
         }
         if(($d['pago']??'')===PagosAutomaticos::YAPE_MP) {
-            if(!(new MercadoPagoGateway())->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.',503);
+            if(!(new MercadoPagoGateway())->configurada()) throw new ApiError('El cobro con Yape (Mercado Pago) todavía no está configurado.', 503, 'PROVEEDOR_PAGO_NO_DISPONIBLE');
             if(!empty($d['codigoPago'])) throw new ApiError('El código de la operación lo genera Mercado Pago.');
             if($id===null) $d['monto']=TariffService::amount((string)$d['hora']);
         }
-        if(!preg_match('/^\d{8}$/',$d['dni'])) throw new ApiError('DNI inválido: se requieren 8 dígitos.');
+        if(!preg_match('/^\d{8}$/',$d['dni'])) throw new ApiError('DNI inválido: se requieren 8 dígitos.', 422, 'DNI_INVALIDO');
         if(!preg_match('/^[+0-9 ()-]{9,20}$/',$d['telefono'])) throw new ApiError('Teléfono inválido.');
         if(!in_array((string)$d['cancha'],['1','2','3','4'],true)||!in_array($d['hora'],['08','09','10','11','12','13','14','15','16','18','19','20','21'],true)) throw new ApiError('Cancha u horario inválido.');
         $dt=DateTimeImmutable::createFromFormat('!Y-m-d',$d['fecha']);
         if(!$dt||$dt->format('Y-m-d')!==$d['fecha']||$d['fecha']<date('Y-m-d')) throw new ApiError('Seleccione una fecha válida que no sea pasada.');
-        if(!in_array($d['pago'],['Yape','Plin','Efectivo','Pasarela QR',PagosAutomaticos::YAPE_MP],true)||!is_numeric($d['monto'])||(float)$d['monto']<=0||(float)$d['monto']>999999.99) throw new ApiError('Método de pago o monto inválido.');
+        if(!in_array($d['pago'],['Yape','Plin','Efectivo','Pasarela QR',PagosAutomaticos::YAPE_MP],true)||!is_numeric($d['monto'])||(float)$d['monto']<=0||(float)$d['monto']>999999.99) throw new ApiError('Método de pago o monto inválido.', 422, 'METODO_NO_PERMITIDO');
         if($id===null) TariffService::validate((string)$d['hora'], (string)$d['monto']);
         if(!in_array($d['deporte']??'Fútbol',['Fútbol','Vóley'],true)) throw new ApiError('Deporte inválido.');
         if(!empty($d['email'])&&!filter_var($d['email'],FILTER_VALIDATE_EMAIL)) throw new ApiError('Correo de cliente inválido.');
@@ -31,14 +31,14 @@ class ReservationService {
         $paymentReceived=is_bool($paymentValue)?($paymentValue?'1':'0'):(string)$paymentValue;
         if(!in_array($paymentReceived,['0','1'],true)||(PagosAutomaticos::es($d['pago'])&&$paymentReceived==='1')) throw new ApiError('Estado de pago inválido.');
         // A DB advisory lock serializes all channels while the reservation and payment commit.
-        if(!query($this->db,"SELECT GET_LOCK('arena7_reservas',5) locked")->get_result()->fetch_assoc()['locked']) throw new ApiError('Sistema ocupado, vuelva a intentar.',409);
+        if(!query($this->db,"SELECT GET_LOCK('arena7_reservas',5) locked")->get_result()->fetch_assoc()['locked']) throw new ApiError('Sistema ocupado, vuelva a intentar.', 409, 'SISTEMA_OCUPADO');
         try {return transaction($this->db,function() use($d,$user,$id,$paymentReceived){
             $old=$id?query($this->db,'SELECT * FROM reservas WHERE id=? FOR UPDATE',[$id])->get_result()->fetch_assoc():null;
-            if($id&&!$old) throw new ApiError('Reserva no encontrada.',404);
-            if($old&&($old['estado']==='Cancelado'||($old['estado']==='Pendiente'&&strtotime($old['hold_until'])<time()))) throw new ApiError('Esta reserva ya no se puede editar.',409);
-            if($old&&((float)$old['monto']!==(float)$d['monto']||$old['pago']!==$d['pago']||$old['codigo_pago']!==($d['codigoPago']??''))) throw new ApiError('El pago registrado no puede alterarse desde la edición de reserva.');
+            if($id&&!$old) throw new ApiError('Reserva no encontrada.', 404, 'RESERVA_NO_ENCONTRADA');
+            if($old&&($old['estado']==='Cancelado'||($old['estado']==='Pendiente'&&strtotime($old['hold_until'])<time()))) throw new ApiError('Esta reserva ya no se puede editar.', 409, 'ESTADO_NO_PERMITIDO');
+            if($old&&((float)$old['monto']!==(float)$d['monto']||$old['pago']!==$d['pago']||$old['codigo_pago']!==($d['codigoPago']??''))) throw new ApiError('El pago registrado no puede alterarse desde la edición de reserva.', 422, 'ESTADO_NO_PERMITIDO');
             $busy=query($this->db,"SELECT id FROM reservas WHERE cancha=? AND fecha=? AND hora=? AND id<>? AND (estado='Confirmado' OR (estado='Pendiente' AND hold_until>NOW())) LIMIT 1",[$d['cancha'],$d['fecha'],$d['hora'],$id??0])->get_result()->fetch_assoc();
-            if($busy) throw new ApiError('La cancha ya está reservada en ese horario.',409);
+            if($busy) throw new ApiError('La cancha ya está reservada en ese horario.', 409, 'CANCHA_NO_DISPONIBLE');
             $identity=$_SESSION['identity']??[];
             $verified=($identity['dni']??null)===$d['dni']&&($identity['nombre']??null)===$d['cliente']&&($identity['expires']??0)>=time();
             $values=[$d['dni'],$d['cliente'],$d['telefono'],$d['cancha'],$d['fecha'],$d['hora'],$d['pago'],$d['codigoPago']??'',$d['monto'],$d['detalle']??'',$user['correo'],$d['email']??'',$d['deporte']??'Fútbol',$verified?'Consulta API':'Manual'];
@@ -51,7 +51,7 @@ class ReservationService {
     public function cancel(int $id,array $user): array {
         return transaction($this->db,function() use($id,$user){
             $r=query($this->db,'SELECT * FROM reservas WHERE id=? FOR UPDATE',[$id])->get_result()->fetch_assoc();
-            if(!$r) throw new ApiError('Reserva no encontrada.',404);
+            if(!$r) throw new ApiError('Reserva no encontrada.', 404, 'RESERVA_NO_ENCONTRADA');
             if($r['estado']==='Cancelado') return ['ok'=>true];
             query($this->db,"UPDATE reservas SET estado='Cancelado',hold_until=NULL WHERE id=?",[$id]);
             query($this->db,"UPDATE pagos SET estado='Cancelado' WHERE reserva_id=? AND estado='Pendiente'",[$id]);

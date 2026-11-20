@@ -1,6 +1,19 @@
 <?php
 date_default_timezone_set('America/Lima');
-class ApiError extends RuntimeException {public function __construct(string $message,public int $status=422){parent::__construct($message);}}
+class ApiError extends RuntimeException {
+    /** Código estable del contrato del servicio (sección 7 del informe); por defecto se deriva del estado HTTP. */
+    public function __construct(string $message,public int $status=422,public string $codigo=''){
+        parent::__construct($message);
+        if($this->codigo==='') $this->codigo=self::codigoPorEstado($status);
+    }
+    public static function codigoPorEstado(int $status): string {
+        return match(true){
+            $status===401=>'SESION_INVALIDA', $status===403=>'ACCESO_DENEGADO', $status===404=>'NO_ENCONTRADO',
+            $status===405=>'METODO_HTTP_NO_PERMITIDO', $status===409=>'CONFLICTO', $status===429=>'LIMITE_INTENTOS',
+            $status>=502=>'PROVEEDOR_NO_DISPONIBLE', $status>=500=>'ERROR_INTERNO', default=>'DATOS_INVALIDOS',
+        };
+    }
+}
 function cfg(string $key,string $default=''): string {return getenv($key)!==false?getenv($key):$default;}
 function respond($value,int $status=200): never {http_response_code($status);echo json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;}
 function query(mysqli $db,string $sql,array $params=[]): mysqli_stmt {
@@ -49,6 +62,7 @@ require_once __DIR__.'/GatewayPaymentService.php';
 require_once __DIR__.'/PasarelaPagoYape.php';
 require_once __DIR__.'/MercadoPagoGateway.php';
 require_once __DIR__.'/YapePaymentService.php';
+require_once __DIR__.'/ServiceRegistry.php';
 require_once __DIR__.'/DniService.php';
 require_once __DIR__.'/CustomerContactService.php';
 require_once __DIR__.'/ReservationService.php';
