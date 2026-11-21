@@ -84,7 +84,7 @@ final class VoucherPdf
             <table>' . $tabla . '</table>
             <div class="monto"><span class="k">Monto ' . ($confirmada ? 'pagado' : 'a pagar') . '</span><span class="v">S/ ' . $e(number_format((float)$r['monto'], 2)) . '</span></div>
             <div class="ubic"><b>Ubicación de ' . $e($local['nombre']) . '</b><br>' . $e($local['local']) . '<br>' . $e($local['direccion'])
-            . '<br><a href="' . $e($local['mapa']) . '">Ver en Google Maps</a> &nbsp;·&nbsp; <a href="' . $e($local['como_llegar']) . '">Cómo llegar</a></div>
+            . '<br><a href="' . $e($local['mapa']) . '">Ver en Google Maps</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="' . $e($local['como_llegar']) . '">Cómo llegar</a></div>
             <div class="pie">Presenta este voucher (impreso o en el celular) en la recepción de Arena 7.<br>
             Documento generado automáticamente por el sistema de reservas Arena 7 el ' . $e($emitido) . '.</div>
         </body></html>';
