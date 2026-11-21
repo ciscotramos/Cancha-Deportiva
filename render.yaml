@@ -18,6 +18,14 @@ services:
         sync: false
       - key: MP_MODE
         value: prueba
+      # Correo: el plan gratuito de Render bloquea los puertos SMTP (465/587),
+      # por eso en la nube se envía con la API HTTPS de Resend.
+      - key: RESEND_API_KEY        # clave API de Resend (permiso Sending access)
+        sync: false
+      - key: MAIL_FROM             # p. ej. "Arena 7 <onboarding@resend.dev>" o un remitente de dominio verificado
+        sync: false
+      # Gmail SMTP solo funciona en local/Docker o en una instancia pagada; si se
+      # completa, tiene prioridad sobre Resend. Dejar vacío en el plan gratuito.
       - key: GMAIL_ADDRESS
         sync: false
       - key: GMAIL_APP_PASSWORD
