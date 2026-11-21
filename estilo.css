@@ -641,23 +641,30 @@ td button:hover{
     .ubicacion-acciones{display:none;}
 }
 
-/* IMPRESIÓN DEL VOUCHER (solo cuando se imprime el voucher) */
+/* IMPRESIÓN DEL VOUCHER (solo cuando se imprime el voucher)
+   El modal es position:fixed y Chrome repite los elementos fijos en cada hoja;
+   por eso se retira el resto de la página del flujo y el modal pasa a estático. */
 @media print{
-    body.imprimir-voucher *{
-        visibility:hidden;
+    body.imprimir-voucher > *:not(#modalVoucher){
+        display:none !important;
     }
 
-    body.imprimir-voucher #voucher,
-    body.imprimir-voucher #voucher *{
-        visibility:visible;
+    body.imprimir-voucher #modalVoucher{
+        position:static;
+        display:block !important;
+        width:auto;
+        height:auto;
+        background:none;
     }
 
     body.imprimir-voucher #voucher{
-        position:absolute;
-        left:0;
-        top:0;
         width:100%;
+        max-width:520px;
+        max-height:none;
+        overflow:visible;
+        margin:0 auto;
         box-shadow:none;
+        border-radius:0;
     }
 
     .voucher-botones{
