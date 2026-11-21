@@ -86,7 +86,10 @@ class NotificationService {
                     'content_type'=>'image/png', 'content_id'=>'yape-qr'
                 ]];
             }
-            $data = externalJson('https://api.resend.com/emails', cfg('RESEND_API_KEY'), $payload, ['Idempotency-Key: arena7-confirmacion-'.$job['id']]);
+            // La clave de idempotencia debe ser única aunque la base se reinicie (en Render los id vuelven a empezar):
+            // se combina el id del aviso con una huella del contenido. Los reintentos del mismo aviso repiten la clave.
+            $huella = substr(hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE).'|'.($job['creado'] ?? '')), 0, 24);
+            $data = externalJson('https://api.resend.com/emails', cfg('RESEND_API_KEY'), $payload, ['Idempotency-Key: arena7-aviso-'.$job['id'].'-'.$huella]);
             if (empty($data['id'])) throw new ApiError('El proveedor no confirmó la aceptación del mensaje.', 502);
             return;
         }
