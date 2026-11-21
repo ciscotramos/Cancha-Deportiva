@@ -6,12 +6,12 @@ class GmailMailer {
             && is_readable(__DIR__.'/../vendor/autoload.php');
     }
 
-    public static function send(string $to, string $subject, string $body, ?string $html = null, ?string $inlineQrPath = null): void {
+    public static function send(string $to, string $subject, string $body, ?string $html = null, ?string $inlineQrPath = null, array $adjuntos = []): void {
         if (!self::configured()) throw new RuntimeException('Gmail no está configurado; instale PHPMailer y configure las credenciales de aplicación.');
-        self::compose($to, $subject, $body, $html, $inlineQrPath)->send();
+        self::compose($to, $subject, $body, $html, $inlineQrPath, $adjuntos)->send();
     }
 
-    public static function compose(string $to, string $subject, string $body, ?string $html = null, ?string $inlineQrPath = null): \PHPMailer\PHPMailer\PHPMailer {
+    public static function compose(string $to, string $subject, string $body, ?string $html = null, ?string $inlineQrPath = null, array $adjuntos = []): \PHPMailer\PHPMailer\PHPMailer {
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Destinatario inválido.');
 
         require_once __DIR__.'/../vendor/autoload.php';
@@ -38,6 +38,9 @@ class GmailMailer {
             }
         } else {
             $mail->Body = $body;
+        }
+        foreach ($adjuntos as $a) {
+            $mail->addStringAttachment($a['content'], $a['name'], \PHPMailer\PHPMailer\PHPMailer::ENCODING_BASE64, $a['type']);
         }
         return $mail;
     }

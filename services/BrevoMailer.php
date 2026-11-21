@@ -26,7 +26,7 @@ class BrevoMailer {
         return ['name' => $nombre !== '' ? $nombre : 'Arena 7', 'email' => $correo];
     }
 
-    public static function send(string $to, string $subject, string $text, ?string $html, ?string $qrPath, string $idempotencia): void {
+    public static function send(string $to, string $subject, string $text, ?string $html, ?string $qrPath, string $idempotencia, array $adjuntos = []): void {
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Destinatario inválido.');
         $remitente = self::remitente();
         if (!self::configured() || $remitente === null) throw new RuntimeException('Brevo no está configurado: defina BREVO_API_KEY y MAIL_FROM.');
@@ -48,6 +48,9 @@ class BrevoMailer {
                 '<img src="cid:yape-qr" alt="Código QR para pagar con Yape" width="320" style="max-width:100%;height:auto">',
                 '<b>El código QR para pagar con Yape va adjunto a este correo.</b>', $payload['htmlContent']);
             $payload['attachment'] = [['name' => 'yape-qr.png', 'content' => base64_encode(file_get_contents($qrPath))]];
+        }
+        foreach ($adjuntos as $a) {
+            $payload['attachment'][] = ['name' => $a['name'], 'content' => base64_encode($a['content'])];
         }
         $data = externalJson(self::API, cfg('BREVO_API_KEY'), $payload, [], 'api-key: ');
         if (empty($data['messageId'])) throw new ApiError('Brevo no confirmó la aceptación del mensaje.', 502);

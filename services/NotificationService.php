@@ -2,6 +2,7 @@
 require_once __DIR__ . '/VenueLocation.php';
 require_once __DIR__ . '/GmailMailer.php';
 require_once __DIR__ . '/BrevoMailer.php';
+require_once __DIR__ . '/VoucherPdf.php';
 class NotificationService {
     public function __construct(private mysqli $db) {}
     public static function maps(): string {return VenueLocation::details()['mapa'];}
@@ -76,10 +77,13 @@ class NotificationService {
         $withYapeQr = $job['evento'] === 'Recibida' && $job['metodo_pago'] === 'Yape';
         $qrPath = $withYapeQr ? __DIR__.'/../assets/yape-qr-codigo.png' : null;
         if ($qrPath !== null && !is_readable($qrPath)) throw new RuntimeException('No se encuentra el QR de Yape para el correo.');
+        // La confirmación lleva el voucher en PDF; si no se puede generar, el aviso sale igual sin adjunto.
+        $adjuntos = $job['evento'] === 'Confirmada' ? $this->voucherAdjunto((int)$job['reserva_id']) : [];
+        if ($adjuntos) $job['mensaje'] .= "\n\nAdjuntamos tu voucher de reserva en PDF.";
         $html = $withYapeQr ? self::paymentHtml($job['mensaje']) : null;
         if ($provider === 'brevo') {
             $huella = substr(hash('sha256', $job['email'].'|'.$subject.'|'.$job['mensaje'].'|'.($job['creado'] ?? '')), 0, 24);
-            BrevoMailer::send($job['email'], $subject, $job['mensaje'], $html, $qrPath, 'arena7-aviso-'.$job['id'].'-'.$huella);
+            BrevoMailer::send($job['email'], $subject, $job['mensaje'], $html, $qrPath, 'arena7-aviso-'.$job['id'].'-'.$huella, $adjuntos);
             return;
         }
         if ($provider === 'resend') {
@@ -93,6 +97,9 @@ class NotificationService {
                     'content_type'=>'image/png', 'content_id'=>'yape-qr'
                 ]];
             }
+            foreach ($adjuntos as $a) {
+                $payload['attachments'][] = ['filename'=>$a['name'], 'content'=>base64_encode($a['content']), 'content_type'=>$a['type']];
+            }
             // La clave de idempotencia debe ser única aunque la base se reinicie (en Render los id vuelven a empezar):
             // se combina el id del aviso con una huella del contenido. Los reintentos del mismo aviso repiten la clave.
             $huella = substr(hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE).'|'.($job['creado'] ?? '')), 0, 24);
@@ -101,7 +108,23 @@ class NotificationService {
             return;
         }
 
-        GmailMailer::send($job['email'], $subject, $job['mensaje'], $html, $qrPath);
+        GmailMailer::send($job['email'], $subject, $job['mensaje'], $html, $qrPath, $adjuntos);
+    }
+
+    /** Voucher de la reserva confirmada en PDF, listo para adjuntar: [['name','content','type']] o [] si falla. */
+    private function voucherAdjunto(int $reservaId): array {
+        try {
+            $r = query($this->db, "SELECT r.id,r.cliente,r.cancha,r.fecha,r.hora,r.pago,r.monto,r.estado,r.usuario,r.creado,
+                    p.id AS pago_id,p.codigo AS pago_codigo
+                FROM reservas r LEFT JOIN pagos p ON p.reserva_id=r.id AND p.estado='Confirmado'
+                WHERE r.id=? ORDER BY p.id DESC LIMIT 1", [$reservaId])->get_result()->fetch_assoc();
+            if (!$r) return [];
+            $r['operacion'] = $r['pago'] === PagosAutomaticos::YAPE_MP ? ($r['pago_codigo'] ?? '') : '';
+            return [['name'=>VoucherPdf::nombreArchivo($reservaId), 'content'=>VoucherPdf::render($r), 'type'=>'application/pdf']];
+        } catch (Throwable $e) {
+            error_log('Arena 7: no se pudo generar el voucher PDF de la reserva '.$reservaId.': '.$e->getMessage());
+            return [];
+        }
     }
 
     public static function paymentHtml(string $message): string {
