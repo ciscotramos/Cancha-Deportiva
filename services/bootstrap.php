@@ -32,9 +32,17 @@ function externalJson(string $url,string $token,?array $data=null,array $extra=[
     if($data!==null){curl_setopt($ch,CURLOPT_POST,true);curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));}
     $raw=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);$curlError=curl_error($ch);curl_close($ch);
     if($raw===false) {error_log('Error de conexión con proveedor externo: '.$curlError);throw new ApiError('No se pudo establecer una conexión segura con el proveedor.',502);}
-    if($code===401||$code===403) throw new ApiError('El token del proveedor no es válido o no tiene acceso al servicio.',502);
-    if($code===429) throw new ApiError('Se alcanzó el límite de consultas del proveedor. Intente más tarde.',503);
-    if($code<200||$code>=300) throw new ApiError('El proveedor no pudo completar la solicitud.',502);
+    // Motivo devuelto por el proveedor (p. ej. Resend: {"message": "..."}), recortado y sin saltos de línea.
+    $motivo='';
+    if($code<200||$code>=300){
+        $err=json_decode((string)$raw,true);
+        $msg=is_array($err)?($err['message']??($err['error']['message']??($err['error']??''))):'';
+        if(is_string($msg)&&$msg!=='') $motivo=' Detalle del proveedor (HTTP '.$code.'): '.mb_substr(preg_replace('/\s+/',' ',$msg),0,220);
+        else $motivo=' (HTTP '.$code.')';
+    }
+    if($code===401||$code===403) throw new ApiError('El proveedor rechazó la solicitud por credenciales o permisos.'.$motivo,502);
+    if($code===429) throw new ApiError('Se alcanzó el límite de consultas del proveedor. Intente más tarde.'.$motivo,503);
+    if($code<200||$code>=300) throw new ApiError('El proveedor no pudo completar la solicitud.'.$motivo,502);
     $result=json_decode($raw,true);if(!is_array($result)) throw new ApiError('Respuesta inválida del proveedor.',502);return $result;
 }
 mysqli_report(MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT);
