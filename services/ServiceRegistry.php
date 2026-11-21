@@ -33,7 +33,7 @@ final class ServiceRegistry {
                 'Encola y envía por correo la solicitud de pago o la confirmación de la reserva, con hasta 3 intentos.',
                 [['GET','/api.php/notificaciones?reserva_id={id}','Consultar estado de envío']],
                 'HTTPS + autenticación + autorización (propietario)',
-                [['nombre'=>'Gmail SMTP / Resend', 'configurado'=>NotificationService::provider() !== ''],
+                [['nombre'=>'Gmail SMTP / Brevo / Resend', 'configurado'=>NotificationService::provider() !== ''],
                  ['nombre'=>'Google Maps (enlace)', 'configurado'=>true]], true),
             self::servicio('SRV-005', 'Servicio de Auditoría', 'Control y trazabilidad', 'Utilidad', 'Nivel 2 · Servicios',
                 'Registra cada evento en un historial de solo inserción encadenado con hash y permite verificar su integridad.',

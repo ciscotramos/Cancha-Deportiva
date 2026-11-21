@@ -20,9 +20,9 @@ function query(mysqli $db,string $sql,array $params=[]): mysqli_stmt {
     $s=$db->prepare($sql);if($params) $s->bind_param(str_repeat('s',count($params)),...$params);$s->execute();return $s;
 }
 function transaction(mysqli $db,callable $fn) {$db->begin_transaction();try {$r=$fn();$db->commit();return $r;}catch(Throwable $e){$db->rollback();throw $e;}}
-function externalJson(string $url,string $token,?array $data=null,array $extra=[]): array {
+function externalJson(string $url,string $token,?array $data=null,array $extra=[],string $authHeader='Authorization: Bearer '): array {
     if(!$token) throw new ApiError('Este proveedor aún no está configurado.',503);
-    $options=[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>15,CURLOPT_HTTPHEADER=>array_merge(['Authorization: Bearer '.$token,'Content-Type: application/json'],$extra)];
+    $options=[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>15,CURLOPT_HTTPHEADER=>array_merge([$authHeader.$token,'Content-Type: application/json','Accept: application/json'],$extra)];
     $caBundle=cfg('CA_BUNDLE_PATH');
     if($caBundle!=='') {
         if(!is_readable($caBundle)) throw new ApiError('No se encuentra el paquete de certificados TLS del servidor.',503);

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Arena 7 - Sistema de Reservas</title>
-    <link rel="stylesheet" href="estilo.css?v=dni-estado-1">
+    <link rel="stylesheet" href="estilo.css?v=impresion-2">
 </head>
 <body>
 
@@ -540,7 +540,7 @@ async function cargarNotificaciones(){
         const lista = await listaResponse.json();
         estado.textContent = servicios.correo
             ? "El envío está configurado. «Enviado» significa que el proveedor aceptó el mensaje."
-            : "El envío no está configurado: falta activar Gmail o Resend. Los avisos quedan pendientes.";
+            : "El envío no está configurado: falta activar Gmail, Brevo o Resend. Los avisos quedan pendientes.";
         tabla.innerHTML = lista.map(n => `<tr><td>${escapeHtml(n.reserva_id)}</td><td>${escapeHtml(n.evento)}</td><td>${escapeHtml(n.email)}</td><td>${escapeHtml(n.estado)}</td><td>${escapeHtml(n.intentos)}</td><td>${escapeHtml(n.enviado_en || "—")}</td><td>${escapeHtml(n.ultimo_error || "")}</td></tr>`).join("") || "<tr><td colspan=\"7\">Aún no hay notificaciones.</td></tr>";
     } catch(error) {
         estado.textContent = "No se pudieron cargar las notificaciones.";

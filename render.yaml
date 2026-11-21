@@ -19,10 +19,12 @@ services:
       - key: MP_MODE
         value: prueba
       # Correo: el plan gratuito de Render bloquea los puertos SMTP (465/587),
-      # por eso en la nube se envía con la API HTTPS de Resend.
-      - key: RESEND_API_KEY        # clave API de Resend (permiso Sending access)
+      # por eso en la nube se envía por API HTTPS. Prioridad: Gmail > Brevo > Resend.
+      - key: BREVO_API_KEY         # clave API de Brevo: envía a cualquier destinatario con un remitente validado
         sync: false
-      - key: MAIL_FROM             # p. ej. "Arena 7 <onboarding@resend.dev>" o un remitente de dominio verificado
+      - key: RESEND_API_KEY        # alternativa: Resend (sin dominio propio solo entrega al correo de la cuenta)
+        sync: false
+      - key: MAIL_FROM             # "Arena 7 <remitente validado en Brevo>" o "Arena 7 <onboarding@resend.dev>"
         sync: false
       # Gmail SMTP solo funciona en local/Docker o en una instancia pagada; si se
       # completa, tiene prioridad sobre Resend. Dejar vacío en el plan gratuito.

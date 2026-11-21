@@ -1,11 +1,13 @@
 <?php
 require_once __DIR__ . '/VenueLocation.php';
 require_once __DIR__ . '/GmailMailer.php';
+require_once __DIR__ . '/BrevoMailer.php';
 class NotificationService {
     public function __construct(private mysqli $db) {}
     public static function maps(): string {return VenueLocation::details()['mapa'];}
     public static function provider(): string {
         if (GmailMailer::configured()) return 'gmail';
+        if (BrevoMailer::configured()) return 'brevo';
         if (cfg('RESEND_API_KEY') !== '' && cfg('MAIL_FROM') !== '') return 'resend';
         return '';
     }
@@ -43,7 +45,7 @@ class NotificationService {
     }
     public function process(): array {
         $provider = self::provider();
-        if ($provider === '') return ['enviados'=>0,'estado'=>'Configure GMAIL_ADDRESS y GMAIL_APP_PASSWORD, o RESEND_API_KEY y MAIL_FROM.'];
+        if ($provider === '') return ['enviados'=>0,'estado'=>'Configure GMAIL_ADDRESS y GMAIL_APP_PASSWORD, BREVO_API_KEY y MAIL_FROM, o RESEND_API_KEY y MAIL_FROM.'];
         if(!query($this->db,"SELECT GET_LOCK('arena7_mail',0) locked")->get_result()->fetch_assoc()['locked']) return ['enviados'=>0,'estado'=>'Otro trabajador activo.'];
         $sent=0;
         try {
@@ -75,6 +77,11 @@ class NotificationService {
         $qrPath = $withYapeQr ? __DIR__.'/../assets/yape-qr-codigo.png' : null;
         if ($qrPath !== null && !is_readable($qrPath)) throw new RuntimeException('No se encuentra el QR de Yape para el correo.');
         $html = $withYapeQr ? self::paymentHtml($job['mensaje']) : null;
+        if ($provider === 'brevo') {
+            $huella = substr(hash('sha256', $job['email'].'|'.$subject.'|'.$job['mensaje'].'|'.($job['creado'] ?? '')), 0, 24);
+            BrevoMailer::send($job['email'], $subject, $job['mensaje'], $html, $qrPath, 'arena7-aviso-'.$job['id'].'-'.$huella);
+            return;
+        }
         if ($provider === 'resend') {
             $payload = [
                 'from'=>cfg('MAIL_FROM'), 'to'=>[$job['email']], 'subject'=>$subject, 'text'=>$job['mensaje']
