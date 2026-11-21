@@ -1222,12 +1222,30 @@ function mostrarVoucher(reserva){
     document.getElementById("modalVoucher").style.display = "flex";
 }
 
-function imprimirVoucher(){
+// Cada impresión marca el body con su modo; la hoja de estilos muestra solo esa parte.
+function imprimirSeccion(modo, paginaCss){
+    document.body.classList.add(modo);
+    let estiloPagina = null;
+    if(paginaCss){
+        estiloPagina = document.createElement("style");
+        estiloPagina.textContent = paginaCss;
+        document.head.appendChild(estiloPagina);
+    }
+    const limpiar = () => {
+        document.body.classList.remove(modo);
+        if(estiloPagina) estiloPagina.remove();
+        window.removeEventListener("afterprint", limpiar);
+    };
+    window.addEventListener("afterprint", limpiar);
     window.print();
 }
 
+function imprimirVoucher(){
+    imprimirSeccion("imprimir-voucher");
+}
+
 function imprimirReporte(){
-    window.print();
+    imprimirSeccion("imprimir-reporte", "@page{size:A4 landscape;margin:10mm;}");
 }
 
 function compartirWhatsApp(){
