@@ -4,6 +4,7 @@ require_once __DIR__ . '/GmailMailer.php';
 require_once __DIR__ . '/BrevoMailer.php';
 require_once __DIR__ . '/VoucherPdf.php';
 class NotificationService {
+    private ?string $voucherError = null;
     public function __construct(private mysqli $db) {}
     public static function maps(): string {return VenueLocation::details()['mapa'];}
     public static function provider(): string {
@@ -64,8 +65,9 @@ class NotificationService {
                 }
                 query($this->db,'UPDATE notificaciones SET intentos=intentos+1,ultimo_intento=NOW() WHERE id=?',[$job['id']]);
                 try {
+                    $this->voucherError = null;
                     $this->send($provider, $job);
-                    query($this->db,"UPDATE notificaciones SET estado='Enviado',ultimo_error=NULL,enviado_en=NOW() WHERE id=?",[$job['id']]);$sent++;
+                    query($this->db,"UPDATE notificaciones SET estado='Enviado',ultimo_error=?,enviado_en=NOW() WHERE id=?",[$this->voucherError ? 'Enviado sin voucher PDF: '.$this->voucherError : null, $job['id']]);$sent++;
                 }catch(Throwable $e){query($this->db,'UPDATE notificaciones SET estado=?,ultimo_error=? WHERE id=?',[(int)$job['intentos']+1>=3?'Fallido':'Error',$e->getMessage(),$job['id']]);}
             }
         } finally {query($this->db,"SELECT RELEASE_LOCK('arena7_mail')");}
@@ -123,6 +125,7 @@ class NotificationService {
             return [['name'=>VoucherPdf::nombreArchivo($reservaId), 'content'=>VoucherPdf::render($r), 'type'=>'application/pdf']];
         } catch (Throwable $e) {
             error_log('Arena 7: no se pudo generar el voucher PDF de la reserva '.$reservaId.': '.$e->getMessage());
+            $this->voucherError = mb_substr($e->getMessage(), 0, 180);
             return [];
         }
     }
